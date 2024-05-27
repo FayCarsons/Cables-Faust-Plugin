@@ -1,0 +1,14 @@
+{
+  "name": "faust-cables",
+  "version": "0.0.0",
+  "description": "Faust plugin for Cables.gl",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@grame/faustwasm": "^0.2.2"
+  }
+}
