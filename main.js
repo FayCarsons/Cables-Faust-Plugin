@@ -76,13 +76,15 @@ faustEditor.onChange = () => {
   faustEditor.debouncer = setTimeout(compile, DEBOUNCE_TIME);
 };
 
-function strToResource(s, typeobj) {
-  const blob = new Blob([s], typeobj);
-  return URL.createObjectURL(blob);
+// Turn a String into a Blob and give it a URL so it may be fetched
+function strToResource(s) {
+  return URL.createObjectURL(
+    new Blob([s], { type: "application/javascript" })
+  );
 }
 
 async function importFaustwasm() {
-  const url = strToResource(attachments.faustwasm, { type: "application/javascript" });
+  const url = strToResource(attachments.faustwasm);
   try {
     const module = await import(url);
     return module.default;
@@ -95,6 +97,7 @@ async function importFaustwasm() {
   }
 }
 
+// Runs once on op initialization
 op.init = async () => {
   const {
     instantiateFaustModuleFromFile,
@@ -106,9 +109,12 @@ op.init = async () => {
     FaustCompiler,
   } = await importFaustwasm();
 
-  const libfaustURL = strToResource(attachments.libfaust, { type: "application/javascript" });
+  const libfaustURL = strToResource(attachments.libfaust);
 
   try {
+    // NOTE: `instantiateFaustModuleFromFile` throws an error: 
+    // "failed to asynchronously prepare wasm: CompileError: WebAssembly.instantiate(): 
+    // expected magic word 00 61 73 6d, found 0a 76 61 72 @+0"
     const module = await instantiateFaustModuleFromFile(libfaustURL);
     const libFaust = new LibFaust(module);
     const compiler = new FaustCompiler(libFaust);
