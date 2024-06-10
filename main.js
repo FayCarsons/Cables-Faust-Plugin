@@ -1,4 +1,3 @@
-
 "esversion: 9";
 
 console.clear();
@@ -8,8 +7,8 @@ const DEBOUNCE_TIME = 333;
 const DEFAULT_SCRIPT = `import("stdfaust.lib");
 
 // Simple filter ping synth with trigger and frequency
-freq = hslider("Frequency [midi:keyon 0]", 440, 10, 10000, 1);
-trig = button("Ping [midi:keyon 0]");
+freq = hslider("Frequency", 440, 10, 10000, 1);
+trig = button("Ping");
 
 impulse = trig : ba.impulsify;
 resonator(in, f) = in : fi.resonbp(f, 70, 1.1);
@@ -29,7 +28,6 @@ const gate = op.inTrigger("Gate");
 const audioOut = op.outObject("Audio out");
 let faustModule;
 let node;
-let paramMap;
 
 const ctx = CABLES.WEBAUDIO.createAudioContext(op)
 
@@ -37,24 +35,15 @@ function MIDItoFreq(midiNote) {
   return (440 / 32) * (2 ** ((midiNote - 9) / 12));
 }
 
-// NOTE: NOT WORKING - no sound even though the web audio routing is not 
-// throwing any errors
 gate.onTriggered = () => {
-  console.log("Pressed!");
   if (!node) {
     console.log("node is NULL");
     return;
   }
 
-  // Failing
-  try {
-    node.keyOn(0, 64, 127)
-  } catch (err) {
-    console.log(`<keyOn> failed: ${err}`)
-  }
-  node.setParamValue(0, 440)
-  node.setParamValue(1, 1)
-  setTimeout(() => node.setParamValue(1, 0), 10)
+  node.setParamValue("/dsp/Frequency", note.get())
+  node.setParamValue("/dsp/Ping", 1)
+  setTimeout(() => node.setParamValue("/dsp/Ping", 0), 10)
 };
 
 async function compile() {
@@ -81,8 +70,6 @@ async function compile() {
 
   try {
     await generator.compile(compiler, "dsp", code, "");
-
-    console.log("compiled!");
 
     if (node) node.disconnect()
     node = await generator.createNode(ctx);
@@ -111,8 +98,7 @@ async function importFaustwasm() {
     return module;
   }
   catch (err) {
-    // Not a function ??
-    // op.setUIError("FaustError", err, 2);
+    op.setUIError("FaustError", err, 2);
   }
   finally {
     URL.revokeObjectURL(url);
@@ -138,8 +124,6 @@ op.init = async () => {
     const libFaust = new LibFaust(module);
     const compiler = new FaustCompiler(libFaust);
 
-    if (!compiler) console.error("COMPILER IS NULL TO BEGIN WITH")
-
     faustModule = {
       "compiler": compiler,
       "FaustWasmInstantiator": FaustWasmInstantiator,
@@ -147,8 +131,6 @@ op.init = async () => {
       "FaustPolyDspGenerator": FaustPolyDspGenerator,
       "FaustMonoWebAudioDsp": FaustMonoWebAudioDsp,
     };
-    console.log("Faust module before compilation:")
-    console.table(faustModule)
 
     await compile();
   }
