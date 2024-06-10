@@ -5,68 +5,95 @@ console.clear();
 
 // Time to wait to compile after a keystroke
 const DEBOUNCE_TIME = 333;
+const DEFAULT_SCRIPT = `import("stdfaust.lib");
+
+// Simple filter ping synth with trigger and frequency
+freq = hslider("Frequency [midi:keyon 0]", 440, 10, 10000, 1);
+trig = button("Ping [midi:keyon 0]");
+
+impulse = trig : ba.impulsify;
+resonator(in, f) = in : fi.resonbp(f, 70, 1.1);
+ping(f) = resonator(impulse, f);
+
+process = ping(freq);
+effect = dm.freeverb_demo;`;
 
 const outTrigger = op.outTrigger("Loaded");
 const faustEditor = op.inStringEditor("Faust Code");
+faustEditor.set(DEFAULT_SCRIPT);
 op.setPortGroup("Faust script", [faustEditor]);
 const voicing = op.inSwitch("Mode", ["Monophonic", "Polyphonic"], "Monophonic");
 const voices = op.inInt("Voices");
 const note = op.inInt("Note");
 const gate = op.inTrigger("Gate");
-
+const audioOut = op.outObject("Audio out");
 let faustModule;
 let node;
-let ctx;
 let paramMap;
+
+const ctx = CABLES.WEBAUDIO.createAudioContext(op)
 
 function MIDItoFreq(midiNote) {
   return (440 / 32) * (2 ** ((midiNote - 9) / 12));
 }
 
-gate.onChange = () => {
-  if (!node) return;
+// NOTE: NOT WORKING - no sound even though the web audio routing is not 
+// throwing any errors
+gate.onTriggered = () => {
+  console.log("Pressed!");
+  if (!node) {
+    console.log("node is NULL");
+    return;
+  }
 
-  const hz = MIDItoFreq(note.get());
-
-  // Play note
+  // Failing
+  try {
+    node.keyOn(0, 64, 127)
+  } catch (err) {
+    console.log(`<keyOn> failed: ${err}`)
+  }
+  node.setParamValue(0, 440)
+  node.setParamValue(1, 1)
+  setTimeout(() => node.setParamValue(1, 0), 10)
 };
 
 async function compile() {
-  if (!faustModule || !ctx) return;
+  if (faustModule == undefined) {
+    console.error("FaustModule is undefined!");
+    return
+  }
 
   const {
-    compiler,
     FaustMonoDspGenerator,
     FaustPolyDspGenerator,
+    compiler,
   } = faustModule;
 
   const code = faustEditor.get();
+
+  const voicingVal = voicing.get();
 
   // Avoiding using uninitialized variables
   let generator = {
     "Monophonic": () => { return new FaustMonoDspGenerator(); },
     "Polyphonic": () => { return new FaustPolyDspGenerator(); }
-  }[voicing.get()]();
+  }[voicingVal]();
 
   try {
     await generator.compile(compiler, "dsp", code, "");
 
-    node = await {
-      "Monophonic": () => { return generator.createNode(ctx); },
-      "Polyphonic": () => { return generator.createNode(ctx, voices.get()); }
-    }();
+    console.log("compiled!");
 
-    for (const param in node.getParams()) {
-      const listener = op.inFloat(param);
-      paramMap[param] = listener;
-      listener.onChange = () => { return node.setParamValue(param, listener.get()); };
-    }
+    if (node) node.disconnect()
+    node = await generator.createNode(ctx);
 
     node.connect(ctx.destination);
+    audioOut.setRef(node);
   }
   catch (err) {
-    op.setUIError("FaustError", err, 2);
-    node = null;
+    console.error(`Error compiling node: ${err}`);
+    node = undefined;
+    audioOut.set(null)
   }
 }
 
@@ -76,48 +103,42 @@ faustEditor.onChange = () => {
   faustEditor.debouncer = setTimeout(compile, DEBOUNCE_TIME);
 };
 
-// Turn a String into a Blob and give it a URL so it may be fetched
-function strToResource(s) {
-  return URL.createObjectURL(
-    new Blob([s], { type: "application/javascript" })
-  );
-}
-
 async function importFaustwasm() {
-  const url = strToResource(attachments.faustwasm);
+  const blob = new Blob([attachments.faustwasm], { "type": "application/javascript" });
+  const url = URL.createObjectURL(blob);
   try {
     const module = await import(url);
-    return module.default;
+    return module;
   }
   catch (err) {
-    op.setUIError("FaustError", err, 2);
+    // Not a function ??
+    // op.setUIError("FaustError", err, 2);
   }
   finally {
     URL.revokeObjectURL(url);
   }
 }
 
-// Runs once on op initialization
 op.init = async () => {
+  const Faust = await importFaustwasm();
+
+  console.table(Faust);
   const {
-    instantiateFaustModuleFromFile,
+    instantiateFaustModule,
     LibFaust,
     FaustWasmInstantiator,
     FaustMonoDspGenerator,
     FaustPolyDspGenerator,
     FaustMonoWebAudioDsp,
     FaustCompiler,
-  } = await importFaustwasm();
-
-  const libfaustURL = strToResource(attachments.libfaust);
+  } = Faust;
 
   try {
-    // NOTE: `instantiateFaustModuleFromFile` throws an error: 
-    // "failed to asynchronously prepare wasm: CompileError: WebAssembly.instantiate(): 
-    // expected magic word 00 61 73 6d, found 0a 76 61 72 @+0"
-    const module = await instantiateFaustModuleFromFile(libfaustURL);
+    const module = await instantiateFaustModule();
     const libFaust = new LibFaust(module);
     const compiler = new FaustCompiler(libFaust);
+
+    if (!compiler) console.error("COMPILER IS NULL TO BEGIN WITH")
 
     faustModule = {
       "compiler": compiler,
@@ -126,13 +147,13 @@ op.init = async () => {
       "FaustPolyDspGenerator": FaustPolyDspGenerator,
       "FaustMonoWebAudioDsp": FaustMonoWebAudioDsp,
     };
-    ctx = new AudioContext();
+    console.log("Faust module before compilation:")
+    console.table(faustModule)
+
+    await compile();
   }
   catch (err) {
     op.setUiError("FaustError", `Cannot fetch LibFaust: ${err}`, 2);
-  }
-  finally {
-    URL.revokeObjectURL(libfaustURL);
   }
 };
 
