@@ -1,10 +1,8 @@
-
+'use strict'
 "esversion: 9";
 
 console.clear();
 
-// Time to wait to compile after a keystroke
-const DEBOUNCE_TIME = 333;
 const DEFAULT_SCRIPT = `import("stdfaust.lib");
 
 // Simple filter ping synth with trigger and frequency
@@ -13,82 +11,54 @@ gate = button("gate");
 
 process = gate : ba.impulsify : fi.resonbp(freq, 100, 1.1) : ma.tanh;`;
 
-// Hacky way to get sum-type-esque behavior out of JS
-const Voicing = {
-  Mono: "Monophonic",
-  Poly: "Polyphonic"
-};
-
-const outTrigger = op.outTrigger("Loaded");
 const faustEditor = op.inStringEditor("Faust Code", DEFAULT_SCRIPT);
 
-op.setPortGroup("Faust script", [faustEditor]);
 const voicing = op.inSwitch("Mode", [Voicing.Mono, Voicing.Poly], Voicing.Mono);
 const voices = op.inInt("Voices");
-const note = op.inInt("Note");
-const gate = op.inTrigger("Gate");
 const audioOut = op.outObject("Audio out");
 
 let faustModule;
 let node;
-const params = [];
+const portHandler = new PortHandler();
 
 const ctx = CABLES.WEBAUDIO.createAudioContext(op);
 
-function MIDItoFreq(midiNote) {
-  return 440 * Math.pow(2, ((midiNote - 69) / 12));
-}
-
-gate.onTriggered = () => {
-  if (!node) {
-    console.log("node is NULL");
-    return;
-  }
-
-  try {
-    const n = note.get();
-    const freq = MIDItoFreq(n + 32);
-
-    if (node.mode === Voicing.Mono) {
-      node.setParamValue("/dsp/freq", freq);
-      node.setParamValue("/dsp/gate", 1);
-      setTimeout(() => { return node.setParamValue("/dsp/Ping", 0); }, 10);
-    } else if (node.mode === Voicing.Poly) {
-      node.keyOn(0, n, 127)
-      setTimeout(() => node.keyOff(0, n, 127), 10)
-    }
-
-  }
-  catch (err) {
-    op.setUiError("FaustError", `Error updating node: ${err}`);
-  }
-};
-
-
+/// Handles switching between monophonic and polyphonic modes
+/// @return {void}
 voicing.onChange = async () => {
   const voicingVal = voicing.get();
 
+  // If user clicks button for me we are currenttly using, return
   if (node && voicingVal === node.mode) return;
   else {
-    if (!!node) node.disconnect();
+    // If node has been initialized, disconnect and free previous node before reinitializing
+    if (node) node.disconnect();
     node = undefined;
     await compile()
   }
 };
 
+
+/// Handles changes in the number of voices 
+/// @return {void}
 voices.onChange = async () => {
   const numVoices = voices.get()
 
+  // If value hasn't changed or is invalid, return
   if (node && numVoices === node.voices || numVoices < 1) return;
   else {
-    if (!!node) node.disconnect();
+    // if node has been initialized, disconnect and free previous node before reinitializing
+    if (node) node.disconnect();
+    node = undefined
     await compile()
   }
 
 }
 
+/// Compiles Faust program, initializes node and IO
 async function compile() {
-  if (faustModule == undefined) {
+  if (!faustModule) {
+    // NOTE: This seems to be getting called when it shouldn't but isn't causing problems?
     console.error("FaustModule is undefined!");
     return;
   }
@@ -99,23 +69,34 @@ async function compile() {
     compiler,
   } = faustModule;
 
+  // Get Faust program
   const code = faustEditor.get();
 
+  // Get voicing mode
   const voicingVal = voicing.get();
 
   try {
-    // Avoiding using uninitialized variables
-    let generator = {
-      [Voicing.Mono]: () => { return new FaustMonoDspGenerator(); },
-      [Voicing.Poly]: () => { return new FaustPolyDspGenerator(); }
-    }[voicingVal]();
+    // Create generator that compiles and instantiates Web Audio nodes
+    let generator;
+
+    if (Voicing.Mono == voicingVal) generator = new FaustMonoDspGenerator()
+    else generator = new FaustPolyDspGenerator()
+
     await generator.compile(compiler, "dsp", code, "");
 
-    if (!!node) node.disconnect();
+    // If node has been initialized, disconnect before reinitialization
+    if (node) node.disconnect();
     node = await generator.createNode(ctx, voices.get());
-    node.mode = voicingVal;
-    console.log("Params: ", node.getParams());
 
+    // Set voicing metadata
+    node.mode = voicingVal;
+    node.numVoices = voices.get()
+
+    // Create IO ports and store references in portHandler
+    portHandler.initControl(node)
+    portHandler.initAudio(node)
+
+    // Connect to audio context and set audio output
     node.connect(ctx.destination);
     audioOut.setRef(node);
   }
@@ -127,12 +108,13 @@ async function compile() {
   }
 }
 
-faustEditor.onChange = () => {
-  // Restart the timeout so as to not spawn excessive compiler processes
-  clearInterval(faustEditor.debouncer);
-  faustEditor.debouncer = setTimeout(compile, DEBOUNCE_TIME);
+// When Faust script changes, recompile
+faustEditor.onChange = async () => {
+  await compile()
 };
 
+/// imports faustwasm attachment
+/// @return {Promise<Module>}
 async function importFaustwasm() {
   const blob = new Blob([attachments.faustwasm], { "type": "application/javascript" });
   const url = URL.createObjectURL(blob);
@@ -141,17 +123,18 @@ async function importFaustwasm() {
     return module;
   }
   catch (err) {
-    op.setUIError("FaustError", err, 2);
+    op.setUIError("FaustError", `Error importing FaustWasm: ${err}`);
   }
   finally {
+    // Cleanup
     URL.revokeObjectURL(url);
   }
 }
 
 op.init = async () => {
+  // Get FaustWasm module
   const Faust = await importFaustwasm();
 
-  console.table(Faust);
   const {
     instantiateFaustModule,
     LibFaust,
@@ -163,10 +146,12 @@ op.init = async () => {
   } = Faust;
 
   try {
+    // Create compiler
     const module = await instantiateFaustModule();
     const libFaust = new LibFaust(module);
     const compiler = new FaustCompiler(libFaust);
 
+    // Set global object faustModule so that compiler etc are available everywhere
     faustModule = {
       "compiler": compiler,
       "FaustWasmInstantiator": FaustWasmInstantiator,
@@ -175,10 +160,11 @@ op.init = async () => {
       "FaustMonoWebAudioDsp": FaustMonoWebAudioDsp,
     };
 
+    // Compile current script
     await compile();
   }
   catch (err) {
-    op.setUiError("FaustError", `Cannot fetch LibFaust: ${err}`, 2);
+    op.setUiError("FaustError", `Cannot fetch LibFaust: ${err}`);
   }
 };
 

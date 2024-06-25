@@ -1,9 +1,9 @@
 'use strict'
 
-// JS enum trick
+// JS enum trick, restricts strings determining voicing behavior to two values
 const Voicing = {
-  Mono: 'monophonic',
-  Poly: 'polyphonic',
+  Mono: 'Monophonic',
+  Poly: 'Polyphonic',
 }
 
 class PortHandler {
@@ -15,9 +15,9 @@ class PortHandler {
     this.audio = []
 
     // NOTE: Currently, I don't see a need for output handling for audio rate outputs
-    // We're outputing a single Web Audio Node for audio out, it can have multipl channels 
+    // We're outputting a single Web Audio Node for audio out, it can have multipl channels 
     // if desired and those channels can be handled elsehwere in the patch
-    // What needss o be determined is whether there are use-cases for control-rate outputs
+    // What needs to be determined is whether there are use-cases for control-rate outputs
   }
 
   /// Determine if a parameter is a button 
@@ -34,7 +34,7 @@ class PortHandler {
   initControl(node) {
     // Iterate over control rate parameters
     const addresses = node.getParams()
-    this.removeUnused(addresses)
+    this.removeUnusedControl(addresses)
 
     for (const address of addresses) {
 
@@ -42,7 +42,8 @@ class PortHandler {
       // update its callback to hold a reference to the current node 
       if (this.control[address]) {
         const paramPort = this.control[address]
-        paramPort.onChange = this.createParamCallback(node, address, paramPort)
+        paramPort[PortHandler.isButton(node.fDescriptor, address) ? 'onTriggered' : 'onChange'] =
+          this.createParamCallback(node, address, paramPort)
         continue;
       }
 
@@ -51,12 +52,13 @@ class PortHandler {
       const name = parts[parts.length - 1];
       console.log(`Creating param handler for param: ${name}`);
 
+      const isButton = PortHandler.isButton(node.fDescriptor, address);
       // Create a Cables float port and attach a simple setter function
       // to its `onChange` field so that the node's param value is set when
       // the port receives a new value
-      const paramPort = op.inFloat(name);
+      const paramPort = isButton ? op.inTrigger(name) : op.inFloat(name);
 
-      paramPort[PortHandler.isButton(node.fDescriptor, address) ? 'onTriggered' : 'onChange'] =
+      paramPort[isButton ? 'onTriggered' : 'onChange'] =
         this.createParamCallback(node, address, paramPort);
 
       // Save in param map
@@ -64,21 +66,30 @@ class PortHandler {
     }
   }
 
-  /// Remove ports not used by current Faust script
+  /// Remove control ports not used by current Faust script
   /// @param {string[]} addresses - current params
   /// @return {void}
-  removeUnused(addresses) {
-    const params = addresses
-
+  removeUnusedControl(addresses) {
     for (const [address, paramPort] of Object.entries(this.control))
-      if (!params.includes(address)) paramPort.remove()
+      if (!addresses.includes(address)) paramPort.remove()
+  }
+
+  /// Remove audio ports not used by current Faust script
+  /// @param {number} numInputs - current # of inputs
+  /// @return {void}
+  removeUnusedControl(numInputs) {
+    if (numInputs === this.audio.length) return;
+    else {
+      // TODO: implement! Add or remove until this.audio.length === numInputs
+    }
   }
 
 
   // NOTE: This is probably not right: currently the 'gate' callback sets 
   // the node's param/keyOn to 'on' and then to 'off' with a delay of 10ms
   // We probably, instead, want to handle gate ons and offs separately to 
-  // allow for extended notes, ADSR envelopes etc
+  // allow for actual gate-like behavior as opposed to the current 
+  // trigger-like behavior
 
   /// Create a callback that sets the given parameter of the Web Audio node
   /// @param {WebAudioNode} node 
@@ -96,10 +107,10 @@ class PortHandler {
       } else {
         const pitchPort = this.control['/dsp/freq']
         if (!pitchPort) {
-          op.setUiError("FaustError", "Polyphonic scripts must take a parameter named 'freq' that acccepts MIDI notes")
+          op.setUiError("FaustError", "Polyphonic scripts must take parameters:\nnote -> slider, MIDI note in\ngate -> button, triggers note\ngain -> *optional* slider, MIDI velocity")
         };
         const pitch = pitchPort.get()
-        node.keyOn(0, pitch, this.control['/dsp/gain'] ?? 127)
+        node.keyOn(0, pitch, this.control['/dsp/gain'].get() ?? 127)
         setTimeout(() => node.keyOff(0, pitch, 0))
       }
     }
