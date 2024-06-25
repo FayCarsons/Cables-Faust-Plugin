@@ -13,6 +13,7 @@ gate = button("gate");
 
 process = gate : ba.impulsify : fi.resonbp(freq, 100, 1.1) : ma.tanh;`;
 
+// Hacky way to get sum-type-esque behavior out of JS
 const Voicing = {
   Mono: "Monophonic",
   Poly: "Polyphonic"
