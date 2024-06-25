@@ -1,3 +1,4 @@
+
 "esversion: 9";
 
 console.clear();
@@ -7,32 +8,34 @@ const DEBOUNCE_TIME = 333;
 const DEFAULT_SCRIPT = `import("stdfaust.lib");
 
 // Simple filter ping synth with trigger and frequency
-freq = hslider("Frequency", 440, 10, 10000, 1);
-trig = button("Ping");
+freq = hslider("freq", 440, 10, 10000, 1);
+gate = button("gate");
 
-impulse = trig : ba.impulsify;
-resonator(in, f) = in : fi.resonbp(f, 70, 1.1);
-ping(f) = resonator(impulse, f);
+process = gate : ba.impulsify : fi.resonbp(freq, 100, 1.1) : ma.tanh;`;
 
-process = ping(freq);
-effect = dm.freeverb_demo;`;
+const Voicing = {
+  Mono: "Monophonic",
+  Poly: "Polyphonic"
+};
 
 const outTrigger = op.outTrigger("Loaded");
-const faustEditor = op.inStringEditor("Faust Code");
-faustEditor.set(DEFAULT_SCRIPT);
+const faustEditor = op.inStringEditor("Faust Code", DEFAULT_SCRIPT);
+
 op.setPortGroup("Faust script", [faustEditor]);
-const voicing = op.inSwitch("Mode", ["Monophonic", "Polyphonic"], "Monophonic");
+const voicing = op.inSwitch("Mode", [Voicing.Mono, Voicing.Poly], Voicing.Mono);
 const voices = op.inInt("Voices");
 const note = op.inInt("Note");
 const gate = op.inTrigger("Gate");
 const audioOut = op.outObject("Audio out");
+
 let faustModule;
 let node;
+const params = [];
 
-const ctx = CABLES.WEBAUDIO.createAudioContext(op)
+const ctx = CABLES.WEBAUDIO.createAudioContext(op);
 
 function MIDItoFreq(midiNote) {
-  return (440 / 32) * (2 ** ((midiNote - 9) / 12));
+  return 440 * Math.pow(2, ((midiNote - 69) / 12));
 }
 
 gate.onTriggered = () => {
@@ -41,15 +44,52 @@ gate.onTriggered = () => {
     return;
   }
 
-  node.setParamValue("/dsp/Frequency", note.get())
-  node.setParamValue("/dsp/Ping", 1)
-  setTimeout(() => node.setParamValue("/dsp/Ping", 0), 10)
+  try {
+    const n = note.get();
+    const freq = MIDItoFreq(n + 32);
+
+    if (node.mode === Voicing.Mono) {
+      node.setParamValue("/dsp/freq", freq);
+      node.setParamValue("/dsp/gate", 1);
+      setTimeout(() => { return node.setParamValue("/dsp/Ping", 0); }, 10);
+    } else if (node.mode === Voicing.Poly) {
+      node.keyOn(0, n, 127)
+      setTimeout(() => node.keyOff(0, n, 127), 10)
+    }
+
+  }
+  catch (err) {
+    op.setUiError("FaustError", `Error updating node: ${err}`);
+  }
 };
+
+
+voicing.onChange = async () => {
+  const voicingVal = voicing.get();
+
+  if (node && voicingVal === node.mode) return;
+  else {
+    if (!!node) node.disconnect();
+    node = undefined;
+    await compile()
+  }
+};
+
+voices.onChange = async () => {
+  const numVoices = voices.get()
+
+  if (node && numVoices === node.voices || numVoices < 1) return;
+  else {
+    if (!!node) node.disconnect();
+    await compile()
+  }
+
+}
 
 async function compile() {
   if (faustModule == undefined) {
     console.error("FaustModule is undefined!");
-    return
+    return;
   }
 
   const {
@@ -62,30 +102,32 @@ async function compile() {
 
   const voicingVal = voicing.get();
 
-  // Avoiding using uninitialized variables
-  let generator = {
-    "Monophonic": () => { return new FaustMonoDspGenerator(); },
-    "Polyphonic": () => { return new FaustPolyDspGenerator(); }
-  }[voicingVal]();
-
   try {
+    // Avoiding using uninitialized variables
+    let generator = {
+      [Voicing.Mono]: () => { return new FaustMonoDspGenerator(); },
+      [Voicing.Poly]: () => { return new FaustPolyDspGenerator(); }
+    }[voicingVal]();
     await generator.compile(compiler, "dsp", code, "");
 
-    if (node) node.disconnect()
-    node = await generator.createNode(ctx);
+    if (!!node) node.disconnect();
+    node = await generator.createNode(ctx, voices.get());
+    node.mode = voicingVal;
+    console.log("Params: ", node.getParams());
 
     node.connect(ctx.destination);
     audioOut.setRef(node);
   }
   catch (err) {
-    console.error(`Error compiling node: ${err}`);
+    op.setUiError("FaustError", `Error compiling node: ${err}`);
+    node.disconnect();
     node = undefined;
-    audioOut.set(null)
+    audioOut.set(null);
   }
 }
 
 faustEditor.onChange = () => {
-  // Restart the timeout so as to not spawn excessive compiiler processes
+  // Restart the timeout so as to not spawn excessive compiler processes
   clearInterval(faustEditor.debouncer);
   faustEditor.debouncer = setTimeout(compile, DEBOUNCE_TIME);
 };
