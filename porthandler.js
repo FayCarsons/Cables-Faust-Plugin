@@ -35,8 +35,6 @@ export class PortHandler {
     // What needs to be determined is whether there are use-cases for control-rate outputs
   }
 
-
-
   hasPolyParams() {
     return !!(this.control['/dsp/freq'] && this.control['/dsp/gate'])
   }
@@ -50,6 +48,7 @@ export class PortHandler {
   /// @param {WebAudioNode} node
   /// @return {void}
   initControl(node) {
+    console.log(this)
     // Get control rate parameters
     const addresses = node.getParams()
 
@@ -62,23 +61,24 @@ export class PortHandler {
       if (this.control[address]) {
         this.addPortCallback(node, address, this.control[address])
 
-        continue
+
+      } else {
+        // isolate param name so we can name the port something more readable
+        const parts = address.split('/')
+        const name = parts[parts.length - 1]
+        console.log(`Creating param handler for param: ${name}`)
+
+        const thisIsButton = isButton(node.fDescriptor, address)
+        // Create a Cables float port and attach a simple setter function
+        // to its `onChange` field so that the node's param value is set when
+        // the port receives a new value
+        const paramPort = thisIsButton ? this.op.inTrigger(name) : this.op.inFloat(name);
+        this.addPortCallback(node, address, paramPort)
+
+        // Save in param map
+        this.control[address] = paramPort;
+
       }
-
-      // isolate param name so we can name the port something more readable
-      const parts = address.split('/')
-      const name = parts[parts.length - 1]
-      console.log(`Creating param handler for param: ${name}`)
-
-      const thisIsButton = isButton(node.fDescriptor, address)
-      // Create a Cables float port and attach a simple setter function
-      // to its `onChange` field so that the node's param value is set when
-      // the port receives a new value
-      const paramPort = thisIsButton ? this.op.inTrigger(name) : this.op.inFloat(name);
-      this.addPortCallback(node, address, paramPort)
-
-      // Save in param map
-      this.control[address] = paramPort;
     }
   }
 
@@ -86,13 +86,18 @@ export class PortHandler {
   /// @param {string[]} addresses - current params
   /// @return {void}
   removeUnusedControl(addresses) {
+    console.log("Before removal: ")
+    console.log(this)
     for (const [address, paramPort] of Object.entries(this.control)) {
       console.log(`checking control map ${address} : ${paramPort}`)
       if (!addresses.includes(address)) {
         console.log(`Removing port \`${address}\``)
         paramPort.remove()
+        this.control[address] = undefined
       }
     }
+    console.log("after removal")
+    console.log(this)
   }
 
   // NOTE: This is probably not right: currently the 'gate' callback sets 
@@ -155,6 +160,7 @@ export class PortHandler {
   /// @param {WebAudioNode} node
   /// @return {void}
   initAudio(node) {
+    console.log(this)
     if (!node) return;
 
     const numInputs = node.getNumInputs()
