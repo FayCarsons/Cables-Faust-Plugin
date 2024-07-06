@@ -1,166 +1,76 @@
-'use strict'
-"esversion: 9";
+console.clear()
 
-// Clear console for easier debugging
-console.clear();
+// Terminology
+// Operator (op) -> the Cables.gl patch object that runs this program
+// Port -> an input/output port on the operator 
+// Node -> a Web Audio node
 
 const DEFAULT_SCRIPT = `import("stdfaust.lib");
 
 // Simple filter ping synth with trigger and frequency
+// Can be used monophonically or polyphonically
 freq = hslider("freq", 440, 10, 10000, 1);
 gate = button("gate");
 
-process = gate : ba.impulsify : fi.resonbp(freq, 100, 1.1) : ma.tanh;`;
+process = gate : ba.impulsify : fi.resonbp(freq, 100, 1.1) : ma.tanh;`
 
-// The built in string editor where you write your Faust code 
-// Shows up in the sidebar when you click on the Faust op, no need to create 
-// an external op
-const faustEditor = op.inStringEditor("Faust Code", DEFAULT_SCRIPT);
-
-// 'enum'
+// A static object with all Voicing values (strings) that can be referenced 
+// elsewhere, preventing mispellings, excessive string comparison, 
+// other illegal states
 const Voicing = {
-  Mono: 'Monophonic',
-  Poly: 'Polyphonic'
+  Mono: "Monophonic",
+  Poly: "Polyphonic"
 }
 
-// Voicing mode
-const voicing = op.inSwitch("Mode", [Voicing.Mono, Voicing.Poly], Voicing.Mono);
-// Number of voices
-const voices = op.inInt("Voices");
+// The object that holds the operator's state
+const faust = {}
 
-const audioOut = op.outObject("Audio out");
 
-// Faustwasm objects and functions
-let faustModule;
-// The instantiated Web Audio node
-let node;
+// Initialize faust object state
+function create() {
+  // Static audio fields
+  faust.audioCtx = CABLES.WEBAUDIO.createAudioContext(op)
+  faust.audioOut = op.outObject("Audio out")
 
-// IO port handler
-let portHandler;
-
-// Web Audio context
-const ctx = CABLES.WEBAUDIO.createAudioContext(op);
-
-/// Handles switching between monophonic and polyphonic modes
-/// @return {void}
-voicing.onChange = async () => {
-  if (!node) return
-
-  const voicingVal = voicing.get();
-
-  // If user clicks button for me we are currenttly using, return
-  if (node && voicingVal === node.mode) return;
-  else {
-    // If node has been initialized, disconnect and free previous node before reinitializing
-    if (node) node.disconnect();
-    node = undefined;
-    await compile()
-  }
-};
-
-/// Handles changes in the number of voices 
-/// @return {void}
-voices.onChange = async () => {
-  if (!node) return
-
-  const numVoices = voices.get()
-
-  // If value hasn't changed or is invalid, return
-  if (numVoices === node.voices || numVoices < 1) return;
-  else {
-    // if node has been initialized, disconnect and free previous node before reinitializing
-    if (node) node.disconnect();
-    node = undefined
-    await compile()
+  faust.staticPorts = {
+    voiceMode: op.inSwitch("Mode", [Voicing.Mono, Voicing.Poly], Voicing.Mono),
+    numVoices: op.inInt("Voices", 1),
+    code: op.inStringEditor("Code", DEFAULT_SCRIPT)
   }
 
-}
+  // TODO: add `IsDirty: bool` field for each param to minimize unnecessary 
+  // recompilation etc
 
-/// Compiles Faust program, initializes node and IO
-async function compile() {
-  if (!faustModule) {
-    console.error("FaustModule is undefined");
-    return;
-  }
-
-  const {
-    FaustMonoDspGenerator,
-    FaustPolyDspGenerator,
-    compiler,
-  } = faustModule;
-
-  // Get Faust program
-  const code = faustEditor.get();
-
-  // Get voicing mode
-  const voicingVal = voicing.get();
-
-  try {
-    // Create generator that compiles and instantiates Web Audio nodes
-    let generator;
-
-    if (Voicing.Mono == voicingVal) generator = new FaustMonoDspGenerator()
-    else generator = new FaustPolyDspGenerator()
-
-    await generator.compile(compiler, "dsp", code, "");
-
-    // If node has been initialized, disconnect before reinitialization
-    if (node) node.disconnect();
-    node = await generator.createNode(ctx, voices.get());
-
-    // Set voicing metadata
-    node.mode = voicingVal;
-    node.numVoices = voices.get()
-
-    // Create IO ports and store references in portHandler
-    portHandler.initControl(node)
-    portHandler.initAudio(node)
-
-    if (voicingVal == Voicing.Poly) {
-      if (!portHandler.hasPolyParams())
-        throw new Error(`Polyphonic scripts must have the following params:
-          freq -> accepts MIDI notes 0-127
-          gate -> accepts triggers
-          gain -> *optional* accepts velocity
-        `)
+  // Add callbacks to static ports, where values are checked in 'diff' to 
+  // prevent unnecessary updates
+  for (const [name, port] of Object.entries(faust.staticPorts)) port.onChange = diff(name, port)
+  function diff(field, port) {
+    return () => {
+      const portVal = port.get()
+      if (portVal === faust[field]) return
+      else {
+        faust[field] = portVal
+        update()
+      }
     }
-    // Connect to audio context and set audio output
-    node.connect(ctx.destination);
-    audioOut.setRef(node);
-  } catch (err) {
-    op.setUiError("FaustError", `Error compiling node: ${err}`);
-    node.disconnect();
-    node = undefined;
-    audioOut.set(null);
-  } finally {
-    op.setUiError("FaustError", null)
+  }
+  faust.voiceMode = faust.staticPorts.voiceMode.get() ?? Voicing.Mono
+  faust.numVoices = faust.staticPorts.numVoices.get() ?? 1
+  faust.code = faust.staticPorts.code.get() ?? DEFAULT_SCRIPT
+}
+
+// Creates an object containing state that PortHandler needs
+function createContext() {
+  return {
+    op,
+    Voicing,
+    voiceMode: faust.voiceMode,
   }
 }
 
-// When Faust script changes, recompile
-faustEditor.onChange = compile
-
-/// imports module attachment, which is raw text, as a Javascript module
-/// @return {Promise<Module>}
-/// imports attachment, which is raw text, as a Javascript module
-/// @return {Promise<Module>}
-async function importModule(attachment) {
-  if (!attachment) console.error("module attachment is NULL");
-  const blob = new Blob([attachment], { "type": "application/javascript" });
-  const url = URL.createObjectURL(blob);
-  try {
-    const module = await import(url);
-    return module;
-  }
-  catch (err) {
-    op.setUIError("FaustError", `Error importing module: ${err}`);
-  }
-  finally {
-    URL.revokeObjectURL(url);
-  }
-}
-
-op.init = async () => {
+// Initialize Faust object with 'faustwasm' library and PortHandler module
+async function initialize() {
+  if (faust.mod) return;
   // Get FaustWasm module
   const {
     instantiateFaustModule,
@@ -170,10 +80,11 @@ op.init = async () => {
     FaustPolyDspGenerator,
     FaustMonoWebAudioDsp,
     FaustCompiler,
-  } = await importModule(attachments.faustwasm);
+  } = await importModule('faustwasm');
 
-  const { PortHandler } = await importModule(attachments.porthandler)
-  portHandler = new PortHandler(op, Voicing)
+  // Import PortHandler module and instantiate handler
+  const { PortHandler } = await importModule('porthandler')
+  faust.portHandler = new PortHandler(createContext())
 
   try {
     // Create compiler
@@ -181,8 +92,8 @@ op.init = async () => {
     const libFaust = new LibFaust(module);
     const compiler = new FaustCompiler(libFaust);
 
-    // Set global object faustModule so that compiler etc are available everywhere
-    faustModule = {
+    // Set faust module field so that compiler etc are available everywhere
+    faust.mod = {
       "compiler": compiler,
       "FaustWasmInstantiator": FaustWasmInstantiator,
       "FaustMonoDspGenerator": FaustMonoDspGenerator,
@@ -190,10 +101,73 @@ op.init = async () => {
       "FaustMonoWebAudioDsp": FaustMonoWebAudioDsp,
     };
 
-    // Compile current script
-    await compile();
+    await update()
+  } catch (err) {
+    console.error(err)
+    op.setUiError("FaustError", `Cannot initialize FaustHandler: ${err}`)
   }
-  catch (err) {
-    op.setUiError("FaustError", `Cannot fetch LibFaust: ${err}`);
+}
+
+// Recompile, update ports, 
+async function update() {
+  if (!faust.mod) {
+    console.error("Faust module is undefined or null")
+    return
   }
-};
+
+  const {
+    FaustMonoDspGenerator,
+    FaustPolyDspGenerator,
+    compiler,
+  } = faust.mod
+
+  try {
+    const generator = Voicing.Mono == faust.voiceMode ? new FaustMonoDspGenerator() : new FaustPolyDspGenerator()
+    await generator.compile(compiler, "dsp", faust.code, "")
+
+    if (faust.node) try { faust.node.disconnect() } catch (_) { }
+    console.log(`Creating new Web Audio node with voices: ${faust.numVoices}, voiceMode: ${faust.voiceMode} attached to audioCtx:  ${faust.audioCtx}`)
+    faust.node = await generator.createNode(faust.audioCtx, faust.numVoices)
+
+    faust.portHandler.update(faust.node, createContext())
+
+    if (faust.voiceMode == Voicing.Poly) {
+      if (!faust.portHandler.hasPolyParams())
+        throw new Error(`Polyphonic scripts must have the following params:
+            freq -> accepts MIDI notes 0-127
+            gate -> accepts triggers
+            gain -> *optional* accepts velocity
+          `)
+    }
+    faust.node.connect(faust.audioCtx.destination)
+    faust.audioOut.setRef(faust.node)
+  } catch (err) {
+    op.setUiError("FaustError", `Error compiling node: ${err}`)
+    console.error(err)
+    if (faust.node) try { faust.node.disconnect() } catch (_) { }
+    faust.node = undefined
+    faust.audioOut.set(null)
+  } finally {
+    if (faust.node)
+      op.setUiError("FaustError", null)
+  }
+}
+
+// Grabs attachment as blob, attaches a URL, then imports that URL as a 
+// Javascript module
+async function importModule(name) {
+  const attachment = attachments[name]
+  if (!attachment) console.error("Cannot import NULL module")
+  const blob = new Blob([attachment], { "type": "application/javascript" })
+  const url = URL.createObjectURL(blob)
+  try {
+    return await import(url)
+  } catch (err) {
+    op.setUiError("FaustError", `Error importing module: ${err}`)
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+create()
+initialize()
