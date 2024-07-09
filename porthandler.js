@@ -26,7 +26,7 @@ function paramName(address) {
 
 // [a] -> int -> ([a], [a])
 function splitAt(arr, idx) {
-  return [arr.slice(0, idx), arr.slice(idx)]
+  return [arr.slice(0, idx + 1), arr.slice(idx)]
 }
 
 class Control {
@@ -75,44 +75,53 @@ class Audio {
   constructor(node, index, context) {
     this.index = index
     this.context = context
-    this.initialize(node)
-  }
-
-  initialize(node) {
     this.port = this.context.inObject(`Audio ${this.index}`)
-    this.update(node)
+    this.addCallback(node)
   }
 
-  addCallback(node) {
-    this.port.onChange = this.createAudioCallback(node)
-  }
-
-  /* ---- Audio callbacks ---- */
   /// attach a callback that updates audio connections to the node
   /// @param {AudioNode} node
   /// @param {Number} idx
   /// @param {CablesPort} audioPort
-  createAudioCallback(node) {
-    return () => {
+  addCallback(node) {
+    this.port.onChange = () => {
       if (!node) return
 
       const input = this.port.get()
       if (input == this.currentInput) return
       else {
         const input = this.port.get()
-        if (!(input instanceof AudioNode)) {
-          this.context.setUiError("FaustError", `Audio input ${this.index} is not a Web Audio node`)
-          return
-        }
+        console.log(`Audio ${this.index} input:`)
+        console.log(input)
+        if (!input) return;
+
+        /* TODO: fix this, this check needs to be done
+         
+          if (!(input instanceof AudioNode)) {
+            this.context.setUiError("FaustError", `Audio input ${this.index} is not a Web Audio node`)
+            return
+          }
+
+        */
 
         try {
-          this.currentInput.connect(node)
+          input.connect(node)
           this.currentInput = input
         } catch (err) {
-          this.context.op.setUiError("FaustError", `Cannot connect audio input ${this.index} to node: ${err}`)
+          console.error(err)
+          this.context.setUiError("FaustError", `Cannot connect audio input ${this.index} to node: ${err}`)
         }
       }
     }
+  }
+
+  // Potentially just run this.port.onChange instead?
+  update(node) {
+    const input = this.port.get()
+    if (!input) return
+    input.connect(node)
+    this.currentInput = input
+
   }
 
   drop() {
@@ -233,15 +242,29 @@ export class PortHandler {
     if (!node) return;
 
     const numInputs = node.getNumInputs()
+    if (numInputs === 0) return
 
-    // Split audio handlers into [0..numInputs] and [numInputs ..]
-    // so that any extra handlers can be dropped and 
-    const [inside, outside] = splitAt(this.audio, numInputs)
+    console.log(`NUMBER OF AUDIO INPUTS: ${numInputs}`)
 
-    outside.forEach(audio => { if (audio) audio.drop() })
-
-    if (inside.length !== numInputs) inside.length = numInputs
-    this.audio = inside.map((audio, idx) => audio ? audio.addCallback(node, this.context) : new Audio(node, idx, this.context))
+    for (let i = 0; i < numInputs; ++i) {
+      if (this.audio[i]) {
+        if (i < numInputs) {
+          console.log(`Audio in ${i} exists, updating`)
+          this.audio[i].addCallback(node)
+          // Reconnect to current audio in
+          this.audio[i].update(node)
+        }
+        else
+          this.audio[i].drop()
+        delete this.audio[i]
+      } else {
+        console.log(`Audio ${i} does not exist, initializing. \nCurrent entry:`)
+        console.log(this.audio[i])
+        console.log("Current porthandler audio: ")
+        console.log(this.audio)
+        this.audio[i] = new Audio(node, i, this.context.op)
+      }
+    }
   }
 
 
@@ -270,6 +293,7 @@ export class PortHandler {
 
   // For debugging, removes all control input ports
   clearPorts() {
+    console.log("CLEARING PORTHANDLER")
     for (const [addr, port] of Object.entries(this.control)) {
       port.drop()
       delete this.control[addr]

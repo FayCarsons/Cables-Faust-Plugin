@@ -2,7 +2,7 @@ console.clear()
 
 // Terminology
 // Operator (op) -> the Cables.gl patch object that runs this program
-// Port -> an input/output port on the operator 
+// Port -> an input/output port on the operator
 // Node -> a Web Audio node
 
 const DEFAULT_SCRIPT = `import("stdfaust.lib");
@@ -14,8 +14,8 @@ gate = button("gate");
 
 process = gate : ba.impulsify : fi.resonbp(freq, 100, 1.1) : ma.tanh;`
 
-// A static object with all Voicing values (strings) that can be referenced 
-// elsewhere, preventing mispellings, excessive string comparison, 
+// A static object with all Voicing values (strings) that can be referenced
+// elsewhere, preventing mispellings, excessive string comparison,
 // other illegal states
 const Voicing = {
   Mono: "Monophonic",
@@ -25,6 +25,15 @@ const Voicing = {
 // The object that holds the operator's state
 const faust = {}
 
+function updateParam(name, port) {
+  return () => {
+    console.log(`Updating ${name}`)
+    const val = port.get()
+    if (faust[name] === val) return
+    faust[name] = val
+    update()
+  }
+}
 
 // Initialize faust object state
 function create() {
@@ -38,22 +47,12 @@ function create() {
     code: op.inStringEditor("Code", DEFAULT_SCRIPT)
   }
 
-  // TODO: add `IsDirty: bool` field for each param to minimize unnecessary 
+  // TODO: add `IsDirty: bool` field for each param to minimize unnecessary
   // recompilation etc
 
-  // Add callbacks to static ports, where values are checked in 'diff' to 
+  // Add callbacks to static ports, where values are checked in 'updateParam' to
   // prevent unnecessary updates
-  for (const [name, port] of Object.entries(faust.staticPorts)) port.onChange = diff(name, port)
-  function diff(field, port) {
-    return () => {
-      const portVal = port.get()
-      if (portVal === faust[field]) return
-      else {
-        faust[field] = portVal
-        update()
-      }
-    }
-  }
+  for (const [name, port] of Object.entries(faust.staticPorts)) port.onChange = updateParam(name, port)
   faust.voiceMode = faust.staticPorts.voiceMode.get() ?? Voicing.Mono
   faust.numVoices = faust.staticPorts.numVoices.get() ?? 1
   faust.code = faust.staticPorts.code.get() ?? DEFAULT_SCRIPT
@@ -108,7 +107,7 @@ async function initialize() {
   }
 }
 
-// Recompile, update ports, 
+// Recompile, update ports,
 async function update() {
   if (!faust.mod) {
     console.error("Faust module is undefined or null")
@@ -133,10 +132,10 @@ async function update() {
 
     if (faust.voiceMode == Voicing.Poly) {
       if (!faust.portHandler.hasPolyParams())
-        throw new Error(`Polyphonic scripts must have the following params:
-            freq -> accepts MIDI notes 0-127
-            gate -> accepts triggers
-            gain -> *optional* accepts velocity
+        throw new Error(`Polyphonic scripts must have the following params:\n
+            freq -> accepts MIDI notes 0-127\n
+            gate -> accepts triggers\n
+            gain -> *optional* accepts velocity\n
           `)
     }
     faust.node.connect(faust.audioCtx.destination)
@@ -153,7 +152,7 @@ async function update() {
   }
 }
 
-// Grabs attachment as blob, attaches a URL, then imports that URL as a 
+// Grabs attachment as blob, attaches a URL, then imports that URL as a
 // Javascript module
 async function importModule(name) {
   const attachment = attachments[name]
