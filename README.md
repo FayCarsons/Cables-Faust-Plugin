@@ -19,3 +19,8 @@ input/output ports for each Faust parameter will be generated. Faust button
 params correspond to Cables' trigger ports, audio to object ports, everything 
 else to number ports. The port's names will mirror your Faust param's, simply 
 attach other Cables operators to control them.
+
+# Polyphony
+
+Polyphonic use requires the presence of `freq`(MIDI note) and `gate`(trigger) 
+params in the Faust script. Optionally, you may include a `gain` param to control velocity.
