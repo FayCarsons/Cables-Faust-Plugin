@@ -21,5 +21,22 @@ Choose the 'empty patch' option. You should now have an empty patch:
 
 Your first step is adding the Faust operator: press `esc` and a dialog will 
 appear, prompting you to choose an operator. Type 'Faust' in the search bar of
-this dialog and you should see this operator.
+this dialog and you should see this operator:
 ![It should look like this](search-bar.png)
+
+Double click this option. A Faust operator will be placed in your patch,
+click on that operator to bring up its settings:
+![The settings in question](settings.png)
+
+Let's break down what's going on here:
+- Mode: This controls whether the operator is acting in monophonic mode 
+  (suitable for monosynths and audio processing) or polyphonic mode 
+  (MIDI-driven synths only)
+- Voices: The number of voices in polyphonic mode, no effect on monophonic mode
+- Code: The Faust program that this operator is running, you can click the 'edit'
+  button and a (minimal) text-editor will pop up with the default Faust script.
+  This is where the behavior of the operator is ultimately set, Faust parameters 
+  will become input and output ports.
+- Freq & gate: These are parameters for this specific Faust script - pitch and a 
+  trigger to articulate notes respectively. When you replace the default script with 
+  your own, the parameters you use will pop up here and on the operator's GUI.
