@@ -15,6 +15,6 @@ those that are potentially unfamiliar with Cables.GL and the Faust programming l
 
 Your first step is going to the [Cables.gl website](cables.gl), creating an 
 account(top right corner) and a new patch (top middle after you log in).
-Choose the 'empty patch' option. You should now have an empty patch
-![like this.]("empty-patch.png")
+Choose the 'empty patch' option. You should now have an empty patch: 
+![like this.](empty-patch.png)
 
