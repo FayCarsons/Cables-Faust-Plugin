@@ -24,11 +24,6 @@ function paramName(address) {
   return address.substring(address.lastIndexOf('/') + 1);
 }
 
-// [a] -> int -> ([a], [a])
-function splitAt(arr, idx) {
-  return [arr.slice(0, idx + 1), arr.slice(idx)]
-}
-
 class Control {
   constructor(node, address, context) {
     this.context = context // 'op' context needed for creating a port, setting error messages
@@ -91,17 +86,14 @@ class Audio {
       if (input == this.currentInput) return
       else {
         const input = this.port.get()
-        console.log(`Audio ${this.index} input:`)
-        console.log(input)
         if (!input) return;
 
-        /* TODO: fix this, this check needs to be done
-         
-          if (!(input instanceof AudioNode)) {
-            this.context.setUiError("FaustError", `Audio input ${this.index} is not a Web Audio node`)
-            return
-          }
-
+        /* TODO: Figure out how to make this work - would be preferable to 
+         * give descriptive errors like this over "Connection failed" or similar
+        if (!(input instanceof AudioNode)) {
+          this.context.setUiError("FaustError", `Audio input ${this.index} is not a Web Audio node`)
+          return
+        }
         */
 
         try {
@@ -118,10 +110,9 @@ class Audio {
   // Potentially just run this.port.onChange instead?
   update(node) {
     const input = this.port.get()
-    if (!input) return
+    if (!input || input == this.currentInput) return
     input.connect(node)
     this.currentInput = input
-
   }
 
   drop() {
@@ -161,15 +152,12 @@ export class PortHandler {
 
         // If there's already a port for this param, 
         // update its callback to hold a reference to the current node and
-        // other potentially new params etc
-        console.log(`Updating Control object ${address}`)
         const callback = this.createControlCallback(node, this.control[address])
         this.control[address].addCallback(callback)
       } else {
 
         // Otherwise create a new node, put it in the control map, and bind a 
         // callback with a reference to the current node to it
-        console.log(`Creating new Control object ${address}`)
         this.control[address] = new Control(node, address, this.context.op)
         const callback = this.createControlCallback(node, this.control[address])
         this.control[address].addCallback(callback)
@@ -195,7 +183,6 @@ export class PortHandler {
   }
 
   createMonoTriggerCallback(node, address) {
-    console.log(`creating mono trigger callback for ${address}`)
     return () => {
       if (!node) return
       node.setParamValue(address, 1)
@@ -209,7 +196,6 @@ export class PortHandler {
   // allow for actual gate-like behavior as opposed to the current 
   // trigger-like behavior
   createPolyTriggerCallback(node) {
-    console.log(`creating poly trigger callback for '/dsp/gate'`)
     return () => {
       if (!node) return
 
@@ -229,7 +215,6 @@ export class PortHandler {
   }
 
   createNumberCallback(node, address) {
-    console.log(`Creating number callback for ${address}`)
     return () => {
       if (!node) return
       node.setParamValue(address, this.control[address].value)
@@ -245,6 +230,8 @@ export class PortHandler {
     if (numInputs === 0) return
 
     console.log(`NUMBER OF AUDIO INPUTS: ${numInputs}`)
+    console.log("PortHandler audio before audio update: ")
+    console.log(this.audio)
 
     for (let i = 0; i < numInputs; ++i) {
       if (this.audio[i]) {
@@ -254,23 +241,20 @@ export class PortHandler {
           // Reconnect to current audio in
           this.audio[i].update(node)
         }
-        else
+        else {
           this.audio[i].drop()
-        delete this.audio[i]
+          delete this.audio[i]
+        }
       } else {
         console.log(`Audio ${i} does not exist, initializing. \nCurrent entry:`)
         console.log(this.audio[i])
-        console.log("Current porthandler audio: ")
-        console.log(this.audio)
+
         this.audio[i] = new Audio(node, i, this.context.op)
       }
     }
-  }
 
-
-
-  updateContext(ctx) {
-    this.context = ctx
+    console.log("PortHandler audio after update: ")
+    console.log(this.audio)
   }
 
   update(node, ctx) {
@@ -291,7 +275,7 @@ export class PortHandler {
     }
   }
 
-  // For debugging, removes all control input ports
+  // For debugging, removes all input ports
   clearPorts() {
     console.log("CLEARING PORTHANDLER")
     for (const [addr, port] of Object.entries(this.control)) {
