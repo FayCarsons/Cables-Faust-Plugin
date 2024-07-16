@@ -18,3 +18,8 @@ account(top right corner) and a new patch (top middle after you log in).
 Choose the 'empty patch' option. You should now have an empty patch: 
 ![like this.](empty-patch.png)
 
+
+Your first step is adding the Faust operator: press `esc` and a dialog will 
+appear, prompting you to choose an operator. Type 'Faust' in the search bar of
+this dialog and you should see this operator.
+![It should look like this](search-bar.png)
