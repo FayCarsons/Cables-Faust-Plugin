@@ -29,6 +29,7 @@ const faust = {}
 function updateParam(name, port) {
   return () => {
     const val = port.get()
+    console.log(`Updating param ${name} to ${val}`)
     // If the value hasn't actually changed then return
     if (faust[name] === val) return
     // otherwise set it in the global Faust object then update
@@ -58,7 +59,7 @@ function start() {
     code: op.inStringEditor("Code", DEFAULT_SCRIPT)
   }
 
-  faust.staticPorts.numVoices.setUiAtribs({ "greyout": () => faust.voiceMode == Voicing.Mono })
+  faust.staticPorts.numVoices.setUiAttribs({ "greyout": () => faust.voiceMode == Voicing.Mono })
 
   // TODO: add `IsDirty: bool` field for each param to minimize unnecessary
   // recompilation etc
@@ -141,7 +142,7 @@ async function update() {
       catch (_) { }
 
     faust.node = await generator.createNode(faust.audioCtx, faust.numVoices)
-    faust.portHandler.update(faust.node)
+    faust.portHandler.update(faust.node, createContext())
 
 
     faust.node.connect(faust.audioCtx.destination)

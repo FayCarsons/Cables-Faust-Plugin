@@ -6,13 +6,13 @@ const TRIGGER_LEN = 20
 // (a -> bool) -> [a] -> ([a], [a])
 function partition(pred, arr) {
   const t = [], f = []
-  arr.forEach(elt => {
-    if (pred(elt)) {
-      t.push(elt)
+  for (const idx in arr) {
+    if (pred(arr[idx])) {
+      t.push(arr[idx])
     } else {
-      f.push(elt)
+      f.push(arr[idx])
     }
-  })
+  }
 
   return [t, f]
 }
@@ -36,8 +36,10 @@ function hasMidi(node) {
 // If we are in poly mode then we need to always count 'freq' 'gate' and 'gain'
 // as MIDI params, otherwise only those specifically label as midi
 function isMidi(descriptor, isPoly = false) {
+  console.log("DESCRIPTOR IN 'isMidi':")
+  console.log(descriptor)
   if (descriptor.meta) {
-    return descriptor.meta.some(option => !!option.midi)
+    return descriptor.meta?.some(option => !!option.midi) || false
   }
 
   return isPoly && ['freq', 'gate', 'gain'].includes(descriptor.label)
@@ -58,7 +60,7 @@ class Control {
   /// Create a port for the given parameter
   /// @param {AudioNode} node 
   initialize() {
-    console.log(`Initializing node: ${this.address}`)
+    console.log(`Initializing port: ${this.address}`)
     this.port = this.isButton ? this.context.inTrigger(this.label) : this.context.inFloat(this.label);
   }
 
@@ -147,7 +149,7 @@ class Audio {
   }
 
   disconnect() {
-    this.port.remove();
+    this.port.remove()
   }
 }
 
@@ -182,7 +184,12 @@ export class PortHandler {
   /// Update or initialize audio input singleton 
   /// @param {WebAudioNode} node
   updateAudio(node) {
-    if (this.audio) {
+    // if there are no audio inputs but our audio singleton is not null then drop it and return 
+    if (node.getNumInputs() === 0 && this.audio) {
+      this.audio.disconnect()
+      this.audio = null
+      return
+    } else if (this.audio) {
       // If the audio singleton has already been instantiated then add a new 
       // callback holding a reference to the current Faust node
       this.audio.addCallback(node)
@@ -205,6 +212,8 @@ export class PortHandler {
   }
 
   partitionMidi(descriptors, isPoly = false) {
+    console.log("DESCRIPTORS IN 'partitionMidi':")
+    console.log(descriptors)
     const [poly, rest] = partition(descriptor => isMidi(descriptor, isPoly), descriptors)
     if (poly.length === 0)
       throw new Error(`Polyphonic scripts must have the following params:\n
@@ -223,7 +232,7 @@ export class PortHandler {
 
     if (ctx.voiceMode == ctx.Voicing.Poly || hasMidi(node)) {
       // ignore midi parameters, they will be controlled by the midi port
-      const [_, nonMidiParams] = this.partitionMidi(node, ctx.voiceMode == this.context.Voicing.Poly)
+      const [_, nonMidiParams] = this.partitionMidi(node.getDescriptors(), ctx.voiceMode == this.context.Voicing.Poly)
       this.updateMidi(node)
       // parameter descriptors with midi filtered out - so that we can create input ports 
       // for only the params that are not controlled by the MIDI handler Singleton
