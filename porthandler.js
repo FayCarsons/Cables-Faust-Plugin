@@ -1,7 +1,6 @@
 'use strict'
 
-const TRIGGER_LEN = 50
-const DEFAULT_VELOCITY = 100
+const TRIGGER_LEN = 20
 
 // Split an array into two arrays according to a predicate 
 // (a -> bool) -> [a] -> ([a], [a])
@@ -18,20 +17,12 @@ function partition(pred, arr) {
   return [t, f]
 }
 
-/// Determine if a parameter is a button  
-/// @param {object[]} descriptors  
-/// @param {string} address
-/// @return {boolean}
-function isButton(descriptor) {
-  return descriptor.type === 'button'
-}
-
 function isMidi(descriptor) {
   if (descriptor.meta) {
-    return descriptor.meta?.some(option => !!option.midi)
+    return descriptor.meta.some(option => !!option.midi)
   }
 
-  return descriptor.label in ['freq', 'gate', 'gain']
+  return ['freq', 'gate', 'gain'].includes(descriptor.label)
 }
 
 
@@ -110,18 +101,16 @@ class Midi {
   }
 }
 
+// Audio input singleton
 class Audio {
-  constructor(node, index, context) {
-    this.index = index
-    this.context = context
-    this.port = this.context.inObject(`Audio ${this.index}`)
-    this.addCallback(node)
+  constructor(node, context) {
+    this.context = context // Cables 'op' object
+    this.port = this.context.inObject(`Audio In`) // Create input port
+    this.addCallback(node) // attach a callback to it
   }
 
-  /// attach a callback that updates audio connections to the node
-  /// @param {AudioNode} node
-  /// @param {Number} idx
-  /// @param {CablesPort} audioPort
+  /// attach a callback that updates audio connections to the Faust node 
+  /// This runs whenver the user connects a new WebAudio node to the 'Audio In' port of the Faust operator
   addCallback(node) {
     this.port.onChange = () => {
       if (!node) return
@@ -131,7 +120,6 @@ class Audio {
       else {
         const input = this.port.get()
         if (!input) return;
-
         if (!(input instanceof AudioNode)) {
           op.setUiError("FaustError", "Audio input is not an audio node: signals connected to audio input must be a WebAudio or Faust node")
         }
@@ -141,18 +129,10 @@ class Audio {
           this.currentInput = input
         } catch (err) {
           console.error(err)
-          this.context.setUiError("FaustError", `Cannot connect audio input ${this.index} to node: ${err}`)
+          this.context.setUiError("FaustError", `Cannot connect audio input to Faust node: ${err}`)
         }
       }
     }
-  }
-
-  // Potentially just run this.port.onChange instead?
-  update(node) {
-    const input = this.port.get()
-    if (!input || input == this.currentInput) return
-    input.connect(node)
-    this.currentInput = input
   }
 
   disconnect() {
@@ -164,8 +144,6 @@ export class PortHandler {
   constructor(context) {
     // parameter 'address' -> input port mapping
     this.control = {}
-    // audio input ports
-    this.audio = []
     // Midi event port 
     this.midi = context.voiceMode == context.Voicing.Poly ? new Midi(context) : null
 
@@ -175,6 +153,7 @@ export class PortHandler {
 
   /// Initialize or update input ports for control-rate parameters
   /// @param {WebAudioNode} node
+  /// @param {FaustUIInputItem[]}
   /// @return {void}
   updateControl(node, descriptors) {
     // Remove ports attached to params that do not exist on current node
@@ -189,40 +168,18 @@ export class PortHandler {
     }
   }
 
-  /// Initialize audio input ports 
+  /// Update or initialize audio input singleton 
   /// @param {WebAudioNode} node
   updateAudio(node) {
-    if (!node) return;
-
-    const numInputs = node.getNumInputs()
-    if (numInputs === 0) return
-
-    console.log(`NUMBER OF AUDIO INPUTS: ${numInputs}`)
-    console.log("PortHandler audio before audio update: ")
-    console.log(this.audio)
-
-    for (let i = 0; i < numInputs; ++i) {
-      if (this.audio[i]) {
-        if (i < numInputs) {
-          console.log(`Audio in ${i} exists, updating`)
-          this.audio[i].addCallback(node)
-          // Reconnect to current audio in
-          this.audio[i].update(node)
-        }
-        else {
-          this.audio[i].disconnect()
-          delete this.audio[i]
-        }
-      } else {
-        console.log(`Audio ${i} does not exist, initializing. \nCurrent entry:`)
-        console.log(this.audio[i])
-
-        this.audio[i] = new Audio(node, i, this.context.op)
-      }
+    if (this.audio) {
+      // If the audio singleton has already been instantiated then add a new 
+      // callback holding a reference to the current Faust node
+      this.audio.addCallback(node)
+    } else {
+      // Instantiate the Audio singleton - this adds the callback mentioned in 
+      // the previous comment
+      this.audio = new Audio(node, this.context.op)
     }
-
-    console.log("PortHandler audio after update: ")
-    console.log(this.audio)
   }
 
   updateMidi(node) {
