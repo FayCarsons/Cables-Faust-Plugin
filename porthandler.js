@@ -110,6 +110,10 @@ class Midi {
       node.midiMessage(data)
     }
   }
+
+  disconnect() {
+    this.port.remove()
+  }
 }
 
 // Audio input singleton
@@ -228,12 +232,20 @@ export class PortHandler {
 
     if (ctx.voiceMode == ctx.Voicing.Poly || hasMidi(node)) {
       // ignore midi parameters, they will be controlled by the midi port
-      const [_, nonMidiParams] = this.partitionMidi(node.getDescriptors(), ctx.voiceMode == this.context.Voicing.Poly)
+      const [_, nonMidiParams] = this.partitionMidi(descriptors, ctx.voiceMode == this.context.Voicing.Poly)
       this.updateMidi(node)
       // parameter descriptors with midi filtered out - so that we can create input ports 
       // for only the params that are not controlled by the MIDI handler Singleton
       descriptors = nonMidiParams
+    } else {
+      // We are not using MIDI, remove our MIDI handler if it exists
+      if (this.midi) {
+        this.midi.disconnect()
+        this.midi = null
+      }
+
     }
+
     this.updateControl(node, descriptors)
     this.updateAudio(node)
   }
