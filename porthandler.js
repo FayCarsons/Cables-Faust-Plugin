@@ -186,11 +186,15 @@ export class PortHandler {
   /// Update or initialize audio input singleton 
   /// @param {WebAudioNode} node
   updateAudio(node) {
+    console.log(`NODE #INPUTS: ${node.getNumInputs()}`)
     // if there are no audio inputs but our audio singleton is not null then drop it and return 
-    if (node.getNumInputs() === 0 && this.audio) {
-      this.audio.disconnect()
-      this.audio = null
-      return
+    if (node.getNumInputs() === 0) {
+      try {
+        this.audio.disconnect()
+        this.audio = null
+
+      } catch (_) { }
+      finally { return }
     } else if (this.audio) {
       // If the audio singleton has already been instantiated then add a new 
       // callback holding a reference to the current Faust node
