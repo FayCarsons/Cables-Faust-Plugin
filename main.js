@@ -25,51 +25,16 @@ const Voicing = {
 // The object that holds the operator's state
 const faust = {}
 
-function hasMidi(node) {
-  const metadata = node.getMeta().meta
-  // Options is generally near the end of the metadata array, so start from there
-  if (metadata)
-    for (let i = metadata.length - 1; i > 0; --i) {
-      const options = metadata[i].options
-      if (options) {
-        return options.trim().includes("[midi:on]")
-      }
-    }
-
-  return false
-}
-
+// Create callback for static params (code, voicing, number of voices)
 function updateParam(name, port) {
   return () => {
-    console.log(`Updating ${name}`)
     const val = port.get()
+    // If the value hasn't actually changed then return
     if (faust[name] === val) return
+    // otherwise set it in the global Faust object then update
     faust[name] = val
     update()
   }
-}
-
-// Initialize faust object state
-function create() {
-  // Static audio fields
-  faust.audioCtx = CABLES.WEBAUDIO.createAudioContext(op)
-  faust.audioOut = op.outObject("Audio out")
-
-  faust.staticPorts = {
-    voiceMode: op.inSwitch("Mode", [Voicing.Mono, Voicing.Poly], Voicing.Mono),
-    numVoices: op.inInt("Voices", 1),
-    code: op.inStringEditor("Code", DEFAULT_SCRIPT)
-  }
-
-  // TODO: add `IsDirty: bool` field for each param to minimize unnecessary
-  // recompilation etc
-
-  // Add callbacks to static ports, where values are checked in 'updateParam' to
-  // prevent unnecessary updates
-  for (const [name, port] of Object.entries(faust.staticPorts)) port.onChange = updateParam(name, port)
-  faust.voiceMode = faust.staticPorts.voiceMode.get() ?? Voicing.Mono
-  faust.numVoices = faust.staticPorts.numVoices.get() ?? 1
-  faust.code = faust.staticPorts.code.get() ?? DEFAULT_SCRIPT
 }
 
 // Creates an object containing state that PortHandler needs
@@ -80,6 +45,33 @@ function createContext() {
     voiceMode: faust.voiceMode,
   }
 }
+
+// Initialize state, start the operator
+function start() {
+  // Static audio fields
+  faust.audioCtx = CABLES.WEBAUDIO.createAudioContext(op)
+  faust.audioOut = op.outObject("Audio out")
+
+  faust.staticPorts = {
+    voiceMode: op.inSwitch("Mode", [Voicing.Mono, Voicing.Poly], Voicing.Mono),
+    numVoices: op.inInt("Voices", 1),
+    code: op.inStringEditor("Code", DEFAULT_SCRIPT)
+  }
+
+  faust.staticPorts.numVoices.setUiAtribs({ "greyout": () => faust.voiceMode == Voicing.Mono })
+
+  // TODO: add `IsDirty: bool` field for each param to minimize unnecessary
+  // recompilation etc
+
+  // Add callbacks to static ports, where values are checked in 'updateParam' to
+  // prevent unnecessary updates
+  for (const [name, port] of Object.entries(faust.staticPorts)) port.onChange = updateParam(name, port)
+  faust.voiceMode = faust.staticPorts.voiceMode.get() ?? Voicing.Mono
+  faust.numVoices = faust.staticPorts.numVoices.get() ?? 1
+  faust.code = faust.staticPorts.code.get() ?? DEFAULT_SCRIPT
+  initialize()
+}
+
 
 // Initialize Faust object with 'faustwasm' library and PortHandler module
 async function initialize() {
@@ -155,10 +147,10 @@ async function update() {
     faust.node.connect(faust.audioCtx.destination)
     faust.audioOut.setRef(faust.node)
   } catch (err) {
-    op.setUiError("FaustError", `Error compiling node: ${err}`)
+    op.setUiError("FaustError", `Error compiling script: ${err}`)
     console.error(err)
     if (faust.node) try { faust.node.disconnect() } catch (_) { }
-    faust.node = undefined
+    faust.node = null
     faust.audioOut.set(null)
   } finally {
     if (faust.node)
@@ -182,5 +174,4 @@ async function importModule(name) {
   }
 }
 
-create()
-initialize()
+start() 

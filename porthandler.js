@@ -17,21 +17,32 @@ function partition(pred, arr) {
   return [t, f]
 }
 
-function isMidi(descriptor) {
+// Faust script has `declare option "[midi:on]";`?
+function hasMidi(node) {
+  const metadata = node.getMeta().meta
+  // Options is generally near the end of the metadata array, so start from there
+  if (metadata)
+    for (let i = metadata.length - 1; i > 0; --i) {
+      const options = metadata[i].options
+      if (options) {
+        return options.trim().includes("[midi:on]")
+      }
+    }
+
+  return false
+}
+
+// Parameter is controlled by midi?
+// If we are in poly mode then we need to always count 'freq' 'gate' and 'gain'
+// as MIDI params, otherwise only those specifically label as midi
+function isMidi(descriptor, isPoly = false) {
   if (descriptor.meta) {
     return descriptor.meta.some(option => !!option.midi)
   }
 
-  return ['freq', 'gate', 'gain'].includes(descriptor.label)
+  return isPoly && ['freq', 'gate', 'gain'].includes(descriptor.label)
 }
 
-
-/// Get the 'name' portion of a dsp address, I.E. '/dsp/:name'
-/// @param {string} address
-/// @return {string}
-function paramName(address) {
-  return address.substring(address.lastIndexOf('/') + 1);
-}
 
 class Control {
   constructor(descriptor, context) {
@@ -193,8 +204,8 @@ export class PortHandler {
     this.midi.update(node)
   }
 
-  partitionMidi(descriptors) {
-    const [poly, rest] = partition(isMidi, descriptors)
+  partitionMidi(descriptors, isPoly = false) {
+    const [poly, rest] = partition(descriptor => isMidi(descriptor, isPoly), descriptors)
     if (poly.length === 0)
       throw new Error(`Polyphonic scripts must have the following params:\n
             freq -> accepts MIDI notes 0-127\n
@@ -210,13 +221,14 @@ export class PortHandler {
 
     let descriptors = node.getDescriptors();
 
-    if (ctx.voiceMode == ctx.Voicing.Poly) {
+    if (ctx.voiceMode == ctx.Voicing.Poly || hasMidi(node)) {
       // ignore midi parameters, they will be controlled by the midi port
-      const [_, nonMidiParams] = this.partitionMidi(node)
+      const [_, nonMidiParams] = this.partitionMidi(node, ctx.voiceMode == this.context.Voicing.Poly)
       this.updateMidi(node)
+      // parameter descriptors with midi filtered out - so that we can create input ports 
+      // for only the params that are not controlled by the MIDI handler Singleton
       descriptors = nonMidiParams
     }
-
     this.updateControl(node, descriptors)
     this.updateAudio(node)
   }
