@@ -25,6 +25,20 @@ const Voicing = {
 // The object that holds the operator's state
 const faust = {}
 
+function hasMidi(node) {
+  const metadata = node.getMeta().meta
+  // Options is generally near the end of the metadata array, so start from there
+  if (metadata)
+    for (let i = metadata.length - 1; i > 0; --i) {
+      const options = metadata[i].options
+      if (options) {
+        return options.trim().includes("[midi:on]")
+      }
+    }
+
+  return false
+}
+
 function updateParam(name, port) {
   return () => {
     console.log(`Updating ${name}`)
@@ -109,11 +123,13 @@ async function initialize() {
 
 // Recompile, update ports,
 async function update() {
+  // If the Faust module hasnot been imported then we cannot continue
   if (!faust.mod) {
     console.error("Faust module is undefined or null")
     return
   }
 
+  // Get the dependencies for this function
   const {
     FaustMonoDspGenerator,
     FaustPolyDspGenerator,
@@ -121,23 +137,21 @@ async function update() {
   } = faust.mod
 
   try {
+    // Create the 'generator' and compile
     const generator = Voicing.Mono == faust.voiceMode ? new FaustMonoDspGenerator() : new FaustPolyDspGenerator()
     await generator.compile(compiler, "dsp", faust.code, "")
 
-    if (faust.node) try { faust.node.disconnect() } catch (_) { }
-    console.log(`Creating new Web Audio node with voices: ${faust.numVoices}, voiceMode: ${faust.voiceMode} attached to audioCtx:  ${faust.audioCtx}`)
+    // If node is not null then we are updating a node that has already been iniialized and 
+    // may potentially need to disconnect it
+    if (faust.node)
+      try { faust.node.disconnect() }
+      // If the node is not connected, that is O.K. 
+      catch (_) { }
+
     faust.node = await generator.createNode(faust.audioCtx, faust.numVoices)
+    faust.portHandler.update(faust.node)
 
-    faust.portHandler.update(faust.node, createContext())
 
-    if (faust.voiceMode == Voicing.Poly) {
-      if (!faust.portHandler.hasPolyParams())
-        throw new Error(`Polyphonic scripts must have the following params:\n
-            freq -> accepts MIDI notes 0-127\n
-            gate -> accepts triggers\n
-            gain -> *optional* accepts velocity\n
-          `)
-    }
     faust.node.connect(faust.audioCtx.destination)
     faust.audioOut.setRef(faust.node)
   } catch (err) {
