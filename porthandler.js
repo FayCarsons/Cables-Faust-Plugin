@@ -36,8 +36,6 @@ function hasMidi(node) {
 // If we are in poly mode then we need to always count 'freq' 'gate' and 'gain'
 // as MIDI params, otherwise only those specifically label as midi
 function isMidi(descriptor, isPoly = false) {
-  console.log("DESCRIPTOR IN 'isMidi':")
-  console.log(descriptor)
   if (descriptor.meta) {
     return descriptor.meta?.some(option => !!option.midi) || false
   }
@@ -212,8 +210,6 @@ export class PortHandler {
   }
 
   partitionMidi(descriptors, isPoly = false) {
-    console.log("DESCRIPTORS IN 'partitionMidi':")
-    console.log(descriptors)
     const [poly, rest] = partition(descriptor => isMidi(descriptor, isPoly), descriptors)
     if (poly.length === 0)
       throw new Error(`Polyphonic scripts must have the following params:\n
