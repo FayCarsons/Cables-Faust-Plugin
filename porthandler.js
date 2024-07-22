@@ -2,10 +2,11 @@
 
 const TRIGGER_LEN = 20
 
-// Split an array into two arrays according to a predicate 
+// Split an array into two arrays according to a predicate
 // (a -> bool) -> [a] -> ([a], [a])
 function partition(pred, arr) {
-  const t = [], f = []
+  const t = [],
+    f = []
   for (const idx in arr) {
     if (pred(arr[idx])) {
       t.push(arr[idx])
@@ -25,7 +26,7 @@ function hasMidi(node) {
     for (let i = metadata.length - 1; i > 0; --i) {
       const options = metadata[i].options
       if (options) {
-        return options.trim().includes("[midi:on]")
+        return options.trim().includes('[midi:on]')
       }
     }
 
@@ -37,12 +38,11 @@ function hasMidi(node) {
 // as MIDI params, otherwise only those specifically label as midi
 function isMidi(descriptor, isPoly = false) {
   if (descriptor.meta) {
-    return descriptor.meta?.some(option => !!option.midi) || false
+    return descriptor.meta?.some((option) => !!option.midi) || false
   }
 
   return isPoly && ['freq', 'gate', 'gain'].includes(descriptor.label)
 }
-
 
 class Control {
   constructor(descriptor, context) {
@@ -56,40 +56,43 @@ class Control {
   }
 
   /// Create a port for the given parameter
-  /// @param {AudioNode} node 
+  /// @param {AudioNode} node
   initialize() {
     console.log(`Initializing port: ${this.address}`)
-    this.port = this.isButton ? this.context.inTrigger(this.label) : this.context.inFloat(this.label);
+    this.port = this.isButton
+      ? this.context.inTrigger(this.label)
+      : this.context.inFloat(this.label)
   }
 
   /// add a callback to port that sets the appropriate param
   ///
-  /// @param {AudioNode} node 
-  /// @param {CablesPort} port 
+  /// @param {AudioNode} node
+  /// @param {CablesPort} port
   addCallback(node) {
-    // The callback field for Cables trigger ports is "onTriggered", 
+    // The callback field for Cables trigger ports is "onTriggered",
     // "onChange" for every other type
     this.port[this.isButton ? 'onTriggered' : 'onChange'] =
-      // If this parameter is a Faust button param then we need to create a callback 
-      // that acts as a trigger, an on-off with no sustain otherwise we may simply set 
+      // If this parameter is a Faust button param then we need to create a callback
+      // that acts as a trigger, an on-off with no sustain otherwise we may simply set
       // the parameter's value to the value the input port is receiving
-      this.isButton ? () => {
-        if (!node) return
-        node.setParamValue(this.address, 1)
-        setTimeout(() => node.setParamValue(this.address, 0), TRIGGER_LEN)
-      } : () => {
-        if (!node) return
-        node.setParamValue(this.address, this.value)
-      }
+      this.isButton
+        ? () => {
+            if (!node) return
+            node.setParamValue(this.address, 1)
+            setTimeout(() => node.setParamValue(this.address, 0), TRIGGER_LEN)
+          }
+        : () => {
+            if (!node) return
+            node.setParamValue(this.address, this.value)
+          }
   }
 
   // Remove the port from the operator
   disconnect() {
-    if (this.port)
-      this.port.remove()
+    if (this.port) this.port.remove()
   }
 
-  // Get the current value of this parameter's input port 
+  // Get the current value of this parameter's input port
   get value() {
     return this.port.get()
   }
@@ -98,7 +101,7 @@ class Control {
 class Midi {
   constructor(context) {
     this.context = context
-    this.port = context.op.inObject("Midi")
+    this.port = context.op.inObject('Midi')
   }
 
   update(node) {
@@ -124,7 +127,7 @@ class Audio {
     this.addCallback(node) // attach a callback to it
   }
 
-  /// attach a callback that updates audio connections to the Faust node 
+  /// attach a callback that updates audio connections to the Faust node
   /// This runs whenver the user connects a new WebAudio node to the 'Audio In' port of the Faust operator
   addCallback(node) {
     this.port.onChange = () => {
@@ -134,9 +137,12 @@ class Audio {
       if (input == this.currentInput) return
       else {
         const input = this.port.get()
-        if (!input) return;
+        if (!input) return
         if (!(input instanceof AudioNode)) {
-          op.setUiError("FaustError", "Audio input is not an audio node: signals connected to audio input must be a WebAudio or Faust node")
+          op.setUiError(
+            'FaustError',
+            'Audio input is not an audio node: signals connected to audio input must be a WebAudio or Faust node',
+          )
         }
 
         try {
@@ -144,7 +150,10 @@ class Audio {
           this.currentInput = input
         } catch (err) {
           console.error(err)
-          this.context.setUiError("FaustError", `Cannot connect audio input to Faust node: ${err}`)
+          this.context.setUiError(
+            'FaustError',
+            `Cannot connect audio input to Faust node: ${err}`,
+          )
         }
       }
     }
@@ -159,8 +168,9 @@ export class PortHandler {
   constructor(context) {
     // parameter 'address' -> input port mapping
     this.control = {}
-    // Midi event port 
-    this.midi = context.voiceMode == context.Voicing.Poly ? new Midi(context) : null
+    // Midi event port
+    this.midi =
+      context.voiceMode == context.Voicing.Poly ? new Midi(context) : null
 
     // share global context w/ main script
     this.context = context
@@ -177,30 +187,32 @@ export class PortHandler {
     for (const descriptor of descriptors) {
       const address = descriptor.address
       // If this is a new parameter then we need to create a control object
-      this.control[address] = this.control[address] ?? new Control(descriptor, this.context.op)
+      this.control[address] =
+        this.control[address] ?? new Control(descriptor, this.context.op)
       // Add a new callback that holds a reference to the current WebAudio node
       this.control[address].addCallback(node)
     }
   }
 
-  /// Update or initialize audio input singleton 
+  /// Update or initialize audio input singleton
   /// @param {WebAudioNode} node
   updateAudio(node) {
     console.log(`NODE #INPUTS: ${node.getNumInputs()}`)
-    // if there are no audio inputs but our audio singleton is not null then drop it and return 
+    // if there are no audio inputs but our audio singleton is not null then drop it and return
     if (node.getNumInputs() === 0) {
       try {
         this.audio.disconnect()
         this.audio = null
-
-      } catch (_) { }
-      finally { return }
+      } catch (_) {
+      } finally {
+        return
+      }
     } else if (this.audio) {
-      // If the audio singleton has already been instantiated then add a new 
+      // If the audio singleton has already been instantiated then add a new
       // callback holding a reference to the current Faust node
       this.audio.addCallback(node)
     } else {
-      // Instantiate the Audio singleton - this adds the callback mentioned in 
+      // Instantiate the Audio singleton - this adds the callback mentioned in
       // the previous comment
       this.audio = new Audio(node, this.context.op)
     }
@@ -212,13 +224,16 @@ export class PortHandler {
       this.midi = new Midi(this.context)
     }
 
-    // Add a new MIDI callback that holds a reference to the current WebAudio node 
+    // Add a new MIDI callback that holds a reference to the current WebAudio node
     // to this.midi
     this.midi.update(node)
   }
 
   partitionMidi(descriptors, isPoly = false) {
-    const [poly, rest] = partition(descriptor => isMidi(descriptor, isPoly), descriptors)
+    const [poly, rest] = partition(
+      (descriptor) => isMidi(descriptor, isPoly),
+      descriptors,
+    )
     if (poly.length === 0)
       throw new Error(`Polyphonic scripts must have the following params:\n
             freq -> accepts MIDI notes 0-127\n
@@ -230,15 +245,19 @@ export class PortHandler {
   }
 
   update(node, ctx) {
-    this.context = ctx
+    // Update the context...or don't
+    this.context = ctx ?? this.context
 
-    let descriptors = node.getDescriptors();
+    let descriptors = node.getDescriptors()
 
     if (ctx.voiceMode == ctx.Voicing.Poly || hasMidi(node)) {
       // ignore midi parameters, they will be controlled by the midi port
-      const [_, nonMidiParams] = this.partitionMidi(descriptors, ctx.voiceMode == this.context.Voicing.Poly)
+      const [_, nonMidiParams] = this.partitionMidi(
+        descriptors,
+        ctx.voiceMode == this.context.Voicing.Poly,
+      )
       this.updateMidi(node)
-      // parameter descriptors with midi filtered out - so that we can create input ports 
+      // parameter descriptors with midi filtered out - so that we can create input ports
       // for only the params that are not controlled by the MIDI handler Singleton
       descriptors = nonMidiParams
     } else {
@@ -247,7 +266,6 @@ export class PortHandler {
         this.midi.disconnect()
         this.midi = null
       }
-
     }
 
     this.updateControl(node, descriptors)
@@ -257,19 +275,19 @@ export class PortHandler {
   /// Remove control ports not used by current Faust script
   /// @param {string[]} addresses - current params
   removeUnusedControl(descriptors) {
-    const addresses = descriptors.map(descriptor => descriptor.address)
+    const addresses = descriptors.map((descriptor) => descriptor.address)
     for (const [address, port] of Object.entries(this.control)) {
       if (!addresses.includes(address)) {
         console.log(`Removing port \`${address}\``)
         port.disconnect()
-        delete this.control[address];
+        delete this.control[address]
       }
     }
   }
 
   // For debugging, removes all input ports
   clearPorts() {
-    console.log("CLEARING PORTHANDLER")
+    console.log('CLEARING PORTHANDLER')
     for (const [addr, port] of Object.entries(this.control)) {
       port.diisconnect()
       delete this.control[addr]
@@ -279,7 +297,6 @@ export class PortHandler {
       delete this.audio[i]
     }
   }
-
 }
 
 export default { PortHandler }

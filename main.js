@@ -18,8 +18,8 @@ process = gate : ba.impulsify : fi.resonbp(freq, 100, 1.1) : ma.tanh;`
 // elsewhere, preventing mispellings, excessive string comparison,
 // other illegal states
 const Voicing = {
-  Mono: "Monophonic",
-  Poly: "Polyphonic"
+  Mono: 'Monophonic',
+  Poly: 'Polyphonic',
 }
 
 // The object that holds the operator's state
@@ -51,32 +51,34 @@ function createContext() {
 function start() {
   // Static audio fields
   faust.audioCtx = CABLES.WEBAUDIO.createAudioContext(op)
-  faust.audioOut = op.outObject("Audio out")
+  faust.audioOut = op.outObject('Audio out')
 
   faust.staticPorts = {
-    voiceMode: op.inSwitch("Mode", [Voicing.Mono, Voicing.Poly], Voicing.Mono),
-    numVoices: op.inInt("Voices", 1),
-    code: op.inStringEditor("Code", DEFAULT_SCRIPT)
+    voiceMode: op.inSwitch('Mode', [Voicing.Mono, Voicing.Poly], Voicing.Mono),
+    numVoices: op.inInt('Voices', 1),
+    code: op.inStringEditor('Code', DEFAULT_SCRIPT),
   }
 
-  faust.staticPorts.numVoices.setUiAttribs({ "greyout": () => faust.voiceMode == Voicing.Mono })
+  faust.staticPorts.numVoices.setUiAttribs({
+    greyout: () => faust.voiceMode == Voicing.Mono,
+  })
 
   // TODO: add `IsDirty: bool` field for each param to minimize unnecessary
   // recompilation etc
 
   // Add callbacks to static ports, where values are checked in 'updateParam' to
   // prevent unnecessary updates
-  for (const [name, port] of Object.entries(faust.staticPorts)) port.onChange = updateParam(name, port)
+  for (const [name, port] of Object.entries(faust.staticPorts))
+    port.onChange = updateParam(name, port)
   faust.voiceMode = faust.staticPorts.voiceMode.get() ?? Voicing.Mono
   faust.numVoices = faust.staticPorts.numVoices.get() ?? 1
   faust.code = faust.staticPorts.code.get() ?? DEFAULT_SCRIPT
   initialize()
 }
 
-
 // Initialize Faust object with 'faustwasm' library and PortHandler module
 async function initialize() {
-  if (faust.mod) return;
+  if (faust.mod) return
   // Get FaustWasm module
   const {
     instantiateFaustModule,
@@ -86,7 +88,7 @@ async function initialize() {
     FaustPolyDspGenerator,
     FaustMonoWebAudioDsp,
     FaustCompiler,
-  } = await importModule('faustwasm');
+  } = await importModule('faustwasm')
 
   // Import PortHandler module and instantiate handler
   const { PortHandler } = await importModule('porthandler')
@@ -94,23 +96,23 @@ async function initialize() {
 
   try {
     // Create compiler
-    const module = await instantiateFaustModule();
-    const libFaust = new LibFaust(module);
-    const compiler = new FaustCompiler(libFaust);
+    const module = await instantiateFaustModule()
+    const libFaust = new LibFaust(module)
+    const compiler = new FaustCompiler(libFaust)
 
     // Set faust module field so that compiler etc are available everywhere
     faust.mod = {
-      "compiler": compiler,
-      "FaustWasmInstantiator": FaustWasmInstantiator,
-      "FaustMonoDspGenerator": FaustMonoDspGenerator,
-      "FaustPolyDspGenerator": FaustPolyDspGenerator,
-      "FaustMonoWebAudioDsp": FaustMonoWebAudioDsp,
-    };
+      compiler: compiler,
+      FaustWasmInstantiator: FaustWasmInstantiator,
+      FaustMonoDspGenerator: FaustMonoDspGenerator,
+      FaustPolyDspGenerator: FaustPolyDspGenerator,
+      FaustMonoWebAudioDsp: FaustMonoWebAudioDsp,
+    }
 
     await update()
   } catch (err) {
     console.error(err)
-    op.setUiError("FaustError", `Cannot initialize FaustHandler: ${err}`)
+    op.setUiError('FaustError', `Cannot initialize FaustHandler: ${err}`)
   }
 }
 
@@ -118,44 +120,46 @@ async function initialize() {
 async function update() {
   // If the Faust module hasnot been imported then we cannot continue
   if (!faust.mod) {
-    console.error("Faust module is undefined or null")
+    console.error('Faust module is undefined or null')
     return
   }
 
   // Get the dependencies for this function
-  const {
-    FaustMonoDspGenerator,
-    FaustPolyDspGenerator,
-    compiler,
-  } = faust.mod
+  const { FaustMonoDspGenerator, FaustPolyDspGenerator, compiler } = faust.mod
 
   try {
     // Create the 'generator' and compile
-    const generator = Voicing.Mono == faust.voiceMode ? new FaustMonoDspGenerator() : new FaustPolyDspGenerator()
-    await generator.compile(compiler, "dsp", faust.code, "")
+    const generator =
+      Voicing.Mono == faust.voiceMode
+        ? new FaustMonoDspGenerator()
+        : new FaustPolyDspGenerator()
+    await generator.compile(compiler, 'dsp', faust.code, '')
 
-    // If node is not null then we are updating a node that has already been iniialized and 
+    // If node is not null then we are updating a node that has already been iniialized and
     // may potentially need to disconnect it
     if (faust.node)
-      try { faust.node.disconnect() }
-      // If the node is not connected, that is O.K. 
-      catch (_) { }
+      try {
+        faust.node.disconnect()
+      } catch (_) {
+        // If the node is not connected, that is O.K.
+      }
 
     faust.node = await generator.createNode(faust.audioCtx, faust.numVoices)
     faust.portHandler.update(faust.node, createContext())
 
-
     faust.node.connect(faust.audioCtx.destination)
     faust.audioOut.setRef(faust.node)
   } catch (err) {
-    op.setUiError("FaustError", `Error compiling script: ${err}`)
+    op.setUiError('FaustError', `Error compiling script: ${err}`)
     console.error(err)
-    if (faust.node) try { faust.node.disconnect() } catch (_) { }
+    if (faust.node)
+      try {
+        faust.node.disconnect()
+      } catch (_) {}
     faust.node = null
     faust.audioOut.set(null)
   } finally {
-    if (faust.node)
-      op.setUiError("FaustError", null)
+    if (faust.node) op.setUiError('FaustError', null)
   }
 }
 
@@ -163,16 +167,16 @@ async function update() {
 // Javascript module
 async function importModule(name) {
   const attachment = attachments[name]
-  if (!attachment) console.error("Cannot import NULL module")
-  const blob = new Blob([attachment], { "type": "application/javascript" })
+  if (!attachment) console.error('Cannot import NULL module')
+  const blob = new Blob([attachment], { type: 'application/javascript' })
   const url = URL.createObjectURL(blob)
   try {
     return await import(url)
   } catch (err) {
-    op.setUiError("FaustError", `Error importing module: ${err}`)
+    op.setUiError('FaustError', `Error importing module: ${err}`)
   } finally {
     URL.revokeObjectURL(url)
   }
 }
 
-start() 
+start()
