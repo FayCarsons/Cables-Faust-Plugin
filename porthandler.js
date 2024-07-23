@@ -25,10 +25,11 @@ function hasMidi(node) {
     for (let i = metadata.length - 1; i > 0; --i) {
       const options = metadata[i].options
       if (options) {
-        return options.trim().includes("[midi:on]")
+        console.log("Node has MIDI metadata")
+        return options.trim().includes('[midi:on]')
       }
     }
-
+  console.log("Node does not have MIDI metadata")
   return false
 }
 
@@ -70,18 +71,22 @@ class Control {
     // The callback field for Cables trigger ports is "onTriggered", 
     // "onChange" for every other type
     this.port[this.isButton ? 'onTriggered' : 'onChange'] =
-      // If this parameter is a Faust button param then we need to create a callback 
-      // that acts as a trigger, an on-off with no sustain otherwise we may simply set 
+      // If this parameter is a Faust button param then we need to create a callback
+      // that acts as a trigger, an on-off with no sustain, otherwise we may simply set
       // the parameter's value to the value the input port is receiving
-      this.isButton ? () => {
-        if (!node) return
-        node.setParamValue(this.address, 1)
-        setTimeout(() => node.setParamValue(this.address, 0), TRIGGER_LEN)
-      } : () => {
-        if (!node) return
-        node.setParamValue(this.address, this.value)
-      }
+      this.isButton ?
+        () => {
+          if (!node) { return }
+          node.setParamValue(this.address, 1)
+          setTimeout(() => node.setParamValue(this.address, 0), TRIGGER_LEN)
+        }
+        : () => {
+          if (!node) { return }
+          node.setParamValue(this.address, this.value)
+        }
   }
+
+
 
   // Remove the port from the operator
   disconnect() {
@@ -186,8 +191,7 @@ export class PortHandler {
   /// Update or initialize audio input singleton 
   /// @param {WebAudioNode} node
   updateAudio(node) {
-    console.log(`NODE #INPUTS: ${node.getNumInputs()}`)
-    // if there are no audio inputs but our audio singleton is not null then drop it and return 
+    // if there are no audio inputs but our audio singleton is not null then drop it and return
     if (node.getNumInputs() === 0) {
       try {
         this.audio.disconnect()
@@ -218,8 +222,11 @@ export class PortHandler {
   }
 
   partitionMidi(descriptors, isPoly = false) {
-    const [poly, rest] = partition(descriptor => isMidi(descriptor, isPoly), descriptors)
-    if (poly.length === 0)
+    const [poly, rest] = partition(
+      (descriptor) => isMidi(descriptor, isPoly),
+      descriptors,
+    )
+    if (isPoly && poly.length === 0)
       throw new Error(`Polyphonic scripts must have the following params:\n
             freq -> accepts MIDI notes 0-127\n
             gate -> accepts triggers\n
@@ -230,13 +237,17 @@ export class PortHandler {
   }
 
   update(node, ctx) {
-    this.context = ctx
+    // Update the context or keep the old if not passed
+    this.context = ctx ?? this.context
 
     let descriptors = node.getDescriptors();
 
     if (ctx.voiceMode == ctx.Voicing.Poly || hasMidi(node)) {
       // ignore midi parameters, they will be controlled by the midi port
-      const [_, nonMidiParams] = this.partitionMidi(descriptors, ctx.voiceMode == this.context.Voicing.Poly)
+      const [_, nonMidiParams] = this.partitionMidi(
+        descriptors,
+        ctx.voiceMode == ctx.Voicing.Poly,
+      )
       this.updateMidi(node)
       // parameter descriptors with midi filtered out - so that we can create input ports 
       // for only the params that are not controlled by the MIDI handler Singleton
@@ -271,7 +282,7 @@ export class PortHandler {
   clearPorts() {
     console.log("CLEARING PORTHANDLER")
     for (const [addr, port] of Object.entries(this.control)) {
-      port.diisconnect()
+      port.disconnect()
       delete this.control[addr]
     }
     for (const i in this.audio) {
