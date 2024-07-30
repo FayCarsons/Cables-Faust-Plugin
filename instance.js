@@ -1,6 +1,6 @@
 'use strict'
 
-const faustInstance = {},
+const
   audioCtx = CABLES.WEBAUDIO.createAudioContext(op),
   Voicing = {
     Mono: 'Monophonic',
@@ -25,14 +25,14 @@ factoryPort.onChange = update
 voicesPort.onChange = update
 
 voicesPort.setUiAttribs({
-  greyout: () => faustInstance.voicing == Voicing.Mono,
+  greyout: () => voicing == Voicing.Mono,
 })
 
 function createContext() {
   return {
     op,
-    Voicing: Voicing.Mono,
-    voiceMode: faustInstance.voicing,
+    Voicing,
+    voiceMode: voicing,
   }
 }
 
@@ -64,9 +64,11 @@ async function update() {
       else {
         voicing = internalFactory.poly ? Voicing.Poly : Voicing.Mono
       }
+
       if (node) {
         node.disconnect()
       }
+
       voices = voicesPort.get() ?? voices
       node = await generator.createNode(audioCtx, voices)
       portHandler.update(node, createContext())
