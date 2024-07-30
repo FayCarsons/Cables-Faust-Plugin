@@ -242,7 +242,7 @@ export class PortHandler {
 
     let descriptors = node.getDescriptors();
 
-    if (ctx.voiceMode == ctx.Voicing.Poly || hasMidi(node)) {
+    if (ctx.voiceMode === ctx.Voicing.Poly || hasMidi(node)) {
       // ignore midi parameters, they will be controlled by the midi port
       const [_, nonMidiParams] = this.partitionMidi(
         descriptors,

@@ -4,7 +4,8 @@
   "description": "Faust plugin for Cables.gl",
   "main": "main.js",
   "scripts": {
-    "build": "rollup -c"
+    "build": "rollup -c",
+    "fmt": "npx prettier --write *.js"
   },
   "author": "",
   "license": "ISC",
