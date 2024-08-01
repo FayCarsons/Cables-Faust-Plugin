@@ -5,16 +5,16 @@ const TRIGGER_LEN = 20
 // Split an array into two arrays according to a predicate 
 // (a -> bool) -> [a] -> ([a], [a])
 function partition(pred, arr) {
-  const t = [], f = []
+  const truthy = [], falsy = []
   for (const idx in arr) {
     if (pred(arr[idx])) {
-      t.push(arr[idx])
+      truthy.push(arr[idx])
     } else {
-      f.push(arr[idx])
+      falsy.push(arr[idx])
     }
   }
 
-  return [t, f]
+  return [truthy, falsy]
 }
 
 // Faust script has `declare option "[midi:on]";`?

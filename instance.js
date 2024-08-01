@@ -25,7 +25,7 @@ factoryPort.onChange = update
 voicesPort.onChange = update
 
 voicesPort.setUiAttribs({
-  greyout: () => voicing == Voicing.Mono,
+  greyout: () => voicing == Voicing.Poly,
 })
 
 function createContext() {
