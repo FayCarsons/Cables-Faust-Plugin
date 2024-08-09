@@ -136,6 +136,7 @@ class Audio {
       if (!node) return
 
       const input = this.port.get()
+      console.log(input)
       if (input == this.currentInput) return
       else {
         const input = this.port.get()
@@ -151,6 +152,15 @@ class Audio {
           console.error(err)
           this.context.setUiError("FaustError", `Cannot connect audio input to Faust node: ${err}`)
         }
+      }
+    }
+  }
+
+  addUnlinkCallback() {
+    this.port.onLinkChanged = () => {
+      if (this.port.isLinked()) return
+      else {
+
       }
     }
   }
@@ -192,7 +202,9 @@ export class PortHandler {
   /// @param {WebAudioNode} node
   updateAudio(node) {
     // if there are no audio inputs but our audio singleton is not null then drop it and return
-    if (node.getNumInputs() === 0) {
+    const numAudioInputs = node.getNumInputs();
+    console.log(`NUM AUDIO INPUTS: ${numAudioInputs}`);
+    if (numAudioInputs === 0) {
       try {
         this.audio.disconnect()
         this.audio = null

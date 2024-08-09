@@ -1,9 +1,5 @@
 'use strict'
-
 console.clear()
-
-// TODO : rewrite this and `main.js` to have individual variables, as opposed
-// to being contained in an object which offers no benefit and is verbose
 
 // Terminology
 // Operator (op) -> the Cables.gl patch object that runs this program
@@ -19,114 +15,119 @@ gate = button("gate");
 
 process = gate : ba.impulsify : fi.resonbp(freq, 100, 1.1) : ma.tanh;`
 
+// Hacky enum, allows for comparison by reference vs deep equality which would be more expensive
 const Voicing = {
   Mono: 'Monophonic',
   Poly: 'Polyphonic',
 }
 
-const factory = {}
+const FAUST_ERROR = "FaustError"
 
-factory.code = DEFAULT_SCRIPT
-factory.voicing = Voicing.Mono
-factory.codePort = op.inStringEditor('Code', DEFAULT_SCRIPT)
-factory.voicingPort = op.inSwitch(
-  'Mode',
-  [Voicing.Mono, Voicing.Poly],
-  Voicing.Mono,
-)
-factory.codePort.onChange = updateParam('code', factory.codePort)
-factory.voicingPort.onChange = updateParam('voicing', factory.voicingPort)
-factory.outPort = op.outObject('Factory')
+class FaustContext {
+  constructor(faustModule) {
+    this.update = this.update.bind(this)
+    this.codePort = op.inStringEditor('Code', DEFAULT_SCRIPT)
+    this.voicingPort = op.inSwitch(
+      'Mode',
+      [Voicing.Mono, Voicing.Poly],
+      Voicing.Mono,
+    )
+    this.outPort = op.outObject('Factory')
 
-function updateParam(name, port) {
-  return () => {
-    const current_value = port.get()
-    if (current_value && current_value != factory[name]) {
-      factory[name] = current_value
-      update()
+    this.code = DEFAULT_SCRIPT
+    this.voicing = Voicing.Mono
+    this.codePort.onChange = this.updateParam('code', this.codePort)
+    this.voicingPort.onChange = this.updateParam('voicing', this.voicingPort)
+    this.faustModule = faustModule
+  }
+
+  // Check that param has actually changed before recompiling
+  updateParam(name, port) {
+    return () => {
+      const currentValue = port.get()
+      if (currentValue && currentValue !== this[name]) {
+        this[name] = currentValue
+        this.update()
+      }
+    }
+  }
+
+  async update() {
+    // If the Faust module hasnot been imported then we cannot continue
+    if (!this.faustModule) {
+      console.error('Faust module is undefined or null')
+      return
+    }
+
+    // Get the dependencies for this function
+    const { FaustMonoDspGenerator, FaustPolyDspGenerator, compiler } =
+      this.faustModule
+
+    try {
+      console.log(`FaustContext Voicing is: ${this.voicing}`)
+      // Create the 'generator' and compile
+      const generator =
+        Voicing.Mono == this.voicing
+          ? new FaustMonoDspGenerator()
+          : new FaustPolyDspGenerator()
+      await generator.compile(compiler, 'dsp', this.code, '')
+
+      this.outPort.set(generator)
+      op.setUiError(FAUST_ERROR, null)
+    } catch (err) {
+      op.setUiError(FAUST_ERROR, `Error compiling script: ${err}`)
+      console.error(err)
     }
   }
 }
 
-// Initialize Faust object with 'faustwasm' library and PortHandler module
-async function initialize() {
-  if (factory.module) return
-  // Get FaustWasm module
-  const {
-    instantiateFaustModule,
-    LibFaust,
-    FaustWasmInstantiator,
-    FaustMonoDspGenerator,
-    FaustPolyDspGenerator,
-    FaustMonoWebAudioDsp,
-    FaustCompiler,
-  } = await importModule('faustwasm')
+// async constructors are not allowed so we use this builder class to first 
+// ensure that the necessary modules have been imported before constructing our
+// main class
+class Builder {
+  async importFaustModule() {
+    {
 
-  try {
-    // Create compiler
-    const module = await instantiateFaustModule()
-    const libFaust = new LibFaust(module)
-    const compiler = new FaustCompiler(libFaust)
+      const text = attachments['faustwasm']
+      if (!text) op.setUiError("FaustError", "module \'faustwasm\' cannot be found, has it been removed from attachments?")
+      const blob = new Blob([text], { type: 'application/javascript' })
+      const url = URL.createObjectURL(blob)
 
-    // Set faust module field so that compiler etc are available everywhere
-    factory.module = {
-      compiler: compiler,
-      FaustWasmInstantiator: FaustWasmInstantiator,
-      FaustMonoDspGenerator: FaustMonoDspGenerator,
-      FaustPolyDspGenerator: FaustPolyDspGenerator,
-      FaustMonoWebAudioDsp: FaustMonoWebAudioDsp,
+      try {
+        // Get FaustWasm module
+        const {
+          instantiateFaustModule,
+          LibFaust,
+          FaustWasmInstantiator,
+          FaustMonoDspGenerator,
+          FaustPolyDspGenerator,
+          FaustCompiler,
+        } = await import(url)
+
+        // Create compiler
+        const faustModule = await instantiateFaustModule()
+        const libFaust = new LibFaust(faustModule)
+        const compiler = new FaustCompiler(libFaust)
+
+        return {
+          compiler: compiler,
+          FaustWasmInstantiator: FaustWasmInstantiator,
+          FaustMonoDspGenerator: FaustMonoDspGenerator,
+          FaustPolyDspGenerator: FaustPolyDspGenerator,
+        }
+      } catch (err) {
+        op.setUiError(FAUST_ERROR, `Error importing module: ${err}`)
+      } finally {
+        URL.revokeObjectURL(url)
+      }
     }
+  }
 
-    await update()
-  } catch (err) {
-    console.error(err)
-    op.setUiError('FaustError', `Cannot initialize FaustFactory: ${err}`)
+  static async build() {
+    const faustModule = await this.importFaustModule()
+    return new FaustContext(faustModule)
   }
 }
 
-// Recompile, update ports,
-async function update() {
-  // If the Faust module hasnot been imported then we cannot continue
-  if (!factory.module) {
-    console.error('Faust module is undefined or null')
-    return
-  }
-
-  // Get the dependencies for this function
-  const { FaustMonoDspGenerator, FaustPolyDspGenerator, compiler } =
-    factory.module
-
-  try {
-    console.log(`Factory Voicing is: ${factory.voicing}`)
-    // Create the 'generator' and compile
-    const generator =
-      Voicing.Mono == factory.voicing
-        ? new FaustMonoDspGenerator()
-        : new FaustPolyDspGenerator()
-    await generator.compile(compiler, 'dsp', factory.code, '')
-
-    factory.outPort.set(generator)
-    op.setUiError('FaustError', null)
-  } catch (err) {
-    op.setUiError('FaustError', `Error compiling script: ${err}`)
-    console.error(err)
-  }
-}
-
-// Grabs attachment as blob, attaches a URL, then imports that URL as a
-// Javascript module
-async function importModule(name) {
-  const attachment = attachments[name]
-  if (!attachment) console.error('Cannot import NULL module')
-  const blob = new Blob([attachment], { type: 'application/javascript' })
-  const url = URL.createObjectURL(blob)
-  try {
-    return await import(url)
-  } catch (err) {
-    op.setUiError('FaustError', `Error importing module: ${err}`)
-  } finally {
-    URL.revokeObjectURL(url)
-  }
-}
-
-initialize()
+// Create the Faust Context object and start it
+Builder.build().update()
