@@ -6,14 +6,19 @@ console.clear()
 // Port -> an input/output port on the operator
 // Node -> a Web Audio node
 
-const DEFAULT_SCRIPT = `import("stdfaust.lib");
+const DEFAULT_SCRIPT =
+  `import("stdfaust.lib");
 
-// Simple filter ping synth with trigger and frequency
-// Can be used monophonically or polyphonically
-freq = hslider("freq", 440, 10, 10000, 1);
-gate = button("gate");
+N = 8;
 
-process = gate : ba.impulsify : fi.resonbp(freq, 100, 1.1) : ma.tanh;`
+oscillator(index, frequency, detune) = os.sawtooth(frequency + index*detune);
+drone(oscillator_count, frequency, detune) = par(i, oscillator_count, oscillator(i, frequency, detune));
+
+frequency = hslider("frequency", 55, 20, 20000, 1);
+detune = hslider("detune", 0.1, -10, 10, 0.01);
+
+process = drone(N, frequency, detune) :> /(N);`
+
 
 // Hacky enum, allows for comparison by reference vs deep equality which would be more expensive
 const Voicing = {
@@ -81,53 +86,41 @@ class FaustContext {
   }
 }
 
-// async constructors are not allowed so we use this builder class to first 
-// ensure that the necessary modules have been imported before constructing our
-// main class
-class Builder {
-  async importFaustModule() {
-    {
+async function build() {
+  const text = attachments['faustwasm']
+  if (!text) op.setUiError("FaustError", "module \'faustwasm\' cannot be found, has it been removed from attachments?")
+  const blob = new Blob([text], { type: 'application/javascript' })
+  const url = URL.createObjectURL(blob)
 
-      const text = attachments['faustwasm']
-      if (!text) op.setUiError("FaustError", "module \'faustwasm\' cannot be found, has it been removed from attachments?")
-      const blob = new Blob([text], { type: 'application/javascript' })
-      const url = URL.createObjectURL(blob)
+  try {
+    // Get FaustWasm module
+    const {
+      instantiateFaustModule,
+      LibFaust,
+      FaustWasmInstantiator,
+      FaustMonoDspGenerator,
+      FaustPolyDspGenerator,
+      FaustCompiler,
+    } = await import(url)
 
-      try {
-        // Get FaustWasm module
-        const {
-          instantiateFaustModule,
-          LibFaust,
-          FaustWasmInstantiator,
-          FaustMonoDspGenerator,
-          FaustPolyDspGenerator,
-          FaustCompiler,
-        } = await import(url)
+    // Create compiler
+    const faustModule = await instantiateFaustModule()
+    const libFaust = new LibFaust(faustModule)
+    const compiler = new FaustCompiler(libFaust)
 
-        // Create compiler
-        const faustModule = await instantiateFaustModule()
-        const libFaust = new LibFaust(faustModule)
-        const compiler = new FaustCompiler(libFaust)
+    const faust = new FaustContext({
+      compiler: compiler,
+      FaustWasmInstantiator: FaustWasmInstantiator,
+      FaustMonoDspGenerator: FaustMonoDspGenerator,
+      FaustPolyDspGenerator: FaustPolyDspGenerator,
+    })
 
-        return {
-          compiler: compiler,
-          FaustWasmInstantiator: FaustWasmInstantiator,
-          FaustMonoDspGenerator: FaustMonoDspGenerator,
-          FaustPolyDspGenerator: FaustPolyDspGenerator,
-        }
-      } catch (err) {
-        op.setUiError(FAUST_ERROR, `Error importing module: ${err}`)
-      } finally {
-        URL.revokeObjectURL(url)
-      }
-    }
-  }
-
-  static async build() {
-    const faustModule = await this.importFaustModule()
-    return new FaustContext(faustModule)
+    faust.update()
+  } catch (err) {
+    op.setUiError(FAUST_ERROR, `Error importing module: ${err}`)
+  } finally {
+    URL.revokeObjectURL(url)
   }
 }
 
-// Create the Faust Context object and start it
-Builder.build().update()
+build()
