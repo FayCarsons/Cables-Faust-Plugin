@@ -19,8 +19,8 @@ detune = hslider("detune", 0.1, -10, 10, 0.01);
 
 process = drone(N, frequency, detune) :> /(N);`
 
-
-// Hacky enum, allows for comparison by reference vs deep equality which would be more expensive
+// Hacky enum, allows for comparison by reference vs deep equality which would 
+// be more expensive
 const Voicing = {
   Mono: 'Monophonic',
   Poly: 'Polyphonic',
@@ -28,33 +28,23 @@ const Voicing = {
 
 const FAUST_ERROR = "FaustError"
 
+const codePort = op.inStringEditor('Code', DEFAULT_SCRIPT)
+const voicingPort = op.inSwitch(
+  'Mode',
+  [Voicing.Mono, Voicing.Poly],
+  Voicing.Mono,
+)
+const outPort = op.outObject('Context')
+
 class FaustContext {
   constructor(faustModule) {
     this.update = this.update.bind(this)
-    this.codePort = op.inStringEditor('Code', DEFAULT_SCRIPT)
-    this.voicingPort = op.inSwitch(
-      'Mode',
-      [Voicing.Mono, Voicing.Poly],
-      Voicing.Mono,
-    )
-    this.outPort = op.outObject('Factory')
 
     this.code = DEFAULT_SCRIPT
     this.voicing = Voicing.Mono
-    this.codePort.onChange = this.updateParam('code', this.codePort)
-    this.voicingPort.onChange = this.updateParam('voicing', this.voicingPort)
+    codePort.onChange = this.update
+    voicingPort.onChange = this.update
     this.faustModule = faustModule
-  }
-
-  // Check that param has actually changed before recompiling
-  updateParam(name, port) {
-    return () => {
-      const currentValue = port.get()
-      if (currentValue && currentValue !== this[name]) {
-        this[name] = currentValue
-        this.update()
-      }
-    }
   }
 
   async update() {
@@ -69,15 +59,17 @@ class FaustContext {
       this.faustModule
 
     try {
-      console.log(`FaustContext Voicing is: ${this.voicing}`)
+      this.code = codePort.get() ?? this.code
+      this.voicing = voicingPort.get() ?? this.voicing
       // Create the 'generator' and compile
       const generator =
-        Voicing.Mono == this.voicing
+        this.voicing == Voicing.Mono
           ? new FaustMonoDspGenerator()
           : new FaustPolyDspGenerator()
+
       await generator.compile(compiler, 'dsp', this.code, '')
 
-      this.outPort.set(generator)
+      outPort.set({ voicing: this.voicing, generator })
       op.setUiError(FAUST_ERROR, null)
     } catch (err) {
       op.setUiError(FAUST_ERROR, `Error compiling script: ${err}`)
