@@ -4,12 +4,12 @@ This is the code for a [Cables.gl](cables.gl) operator that enables users to liv
 [Faust](https://faust.grame.fr/) programs in their Cables patches.
 
 It is currently a work in progress, with a final release planned at the end of 
-(Google Summer of Code)[https://summerofcode.withgoogle.com/programs/2024] 2024.
+[Google Summer of Code](https://summerofcode.withgoogle.com/programs/2024) 2024.
 
 # Usage
 
 If you'd like to use the WIP yourself, first create a tree-shaken version of the 
-(faustwasm)[https://github.com/grame-cncm/faustwasm/tree/master] library by running `npm run build`.
+[faustwasm](https://github.com/grame-cncm/faustwasm/tree/master) library by running `npm run build`.
 Then place the contents of `main.js` in a custom Cables operator, and the contents 
 of `porthandler.js` and `dist/index.js` into Cables attachments named 
 `porthandler` and `faustwasm` respectively.
