@@ -1,6 +1,6 @@
 # Using Faust in Cables.gl
 
-The aim of this tutorial is to get you comfortable writing your own embedded DSP scripts in the [Cables.gl](https://www.cables.gl) platform using the [Faust](https://www.grame.fr) operator that I developed. We will go over a series of examples that demonstrate all of the operator's core features, with links to the examples so you can follow along. 
+The aim of this tutorial is to get you comfortable writing your own embedded DSP scripts in the [Cables.gl](https://www.cables.gl) platform using the [Faust](https://faust.grame.fr) operator that I developed. We will go over a series of examples that demonstrate all of the operator's core features, with links to the examples so you can follow along. 
 
 ## Glossary
 
@@ -46,4 +46,5 @@ There are two ways to incorporate MIDI into a Faust program inside of the `Faust
 - Using the `declare options [midi:on]` Faust syntax and labeling MIDI controlled parameters as such. 
 - Running the program in polyphonic mode, in which case it will expect the parameters `freq` or `key` for frequency, `gate` for note triggering, and optionally `gain`, `vel`, or `velocity` which will be controlled by MIDI velocity.
 
+Doing either of these things will cause each `FaustInstance` to create an `Object` port which expects MIDI messages.
 Normal, non-MIDI, parameters as well as audio input can coexist with MIDI input, allowing for more complex control schemes and DSP programs such as polyphonic granular synthesizers or vocoders. 
