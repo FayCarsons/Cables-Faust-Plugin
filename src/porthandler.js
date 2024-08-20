@@ -159,8 +159,10 @@ class Midi {
 class Audio {
   constructor(node, context) {
     this.context = context // Cables 'op' object
+    this.currentInput = null // initialize current audio connection as null
     this.port = this.context.inObject(`Audio In`) // Create input port
     this.addCallback(node) // attach a callback to it
+    this.addUnlinkCallback(node)
   }
 
   /// attach a callback that updates audio connections to the Faust node 
@@ -171,7 +173,7 @@ class Audio {
 
       const input = this.port.get()
       console.log(input)
-      if (input == this.currentInput) return
+      if (this.currentInput) return
       else {
         const input = this.port.get()
         if (!input) return;
@@ -190,11 +192,11 @@ class Audio {
     }
   }
 
-  addUnlinkCallback() {
+  addUnlinkCallback(node) {
     this.port.onLinkChanged = () => {
       if (this.port.isLinked()) return
       else {
-
+        this.currentInput.disconnect(node)
       }
     }
   }
@@ -248,6 +250,7 @@ export class PortHandler {
       // If the audio singleton has already been instantiated then add a new 
       // callback holding a reference to the current Faust node
       this.audio.addCallback(node)
+      this.audio.addUnlinkCallback(node)
     } else {
       // Instantiate the Audio singleton - this adds the callback mentioned in 
       // the previous comment
