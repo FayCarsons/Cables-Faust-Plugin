@@ -24,11 +24,9 @@ function hasMidi(node) {
     for (let i = metadata.length - 1; i > 0; --i) {
       const options = metadata[i].options
       if (options) {
-        console.log("Node has MIDI metadata")
         return options.trim().includes('[midi:on]')
       }
     }
-  console.log("Node does not have MIDI metadata")
   return false
 }
 
@@ -60,7 +58,7 @@ class Control {
     this.initialize()
   }
 
-  static parseType(typeString) {
+  parseType(typeString) {
     switch (typeString) {
       case 'button': return ControlType.Button
       case 'checkbox': return ControlType.CheckBox
@@ -68,15 +66,11 @@ class Control {
     }
   }
 
-  static isTriggerType() {
-    return this.type == ControlType.Button || this.type == ControlType.CheckBox
-  }
-
   /// Create a port for the given parameter
   /// @param {AudioNode} node 
   initialize() {
-    console.log(`Initializing port: ${this.address}`)
-    if (this.isTriggerType())
+    console.log(`Initializing control port: ${this.address}`)
+    if (this.type == ControlType.Button || this.type == ControlType.CheckBox)
       this.port = this.context.inTrigger(this.label)
     else
       this.port = this.context.inFloat(this.label)
@@ -101,7 +95,7 @@ class Control {
   }
 
   addButtonCallback(node) {
-    return function () {
+    return () => {
       if (!node) { return }
       node.setParamValue(this.address, 1)
       setTimeout(() => node.setParamValue(this.address, 0), TRIGGER_LEN)
@@ -109,16 +103,17 @@ class Control {
   }
 
   addSliderCallback(node) {
-    return function () {
+    return () => {
       if (!node) { return }
-      node.setParamValue(this.address, this.value())
+      node.setParamValue(this.address, this.port.get())
     }
   }
 
   addCheckBoxCallback(node) {
-    return function () {
+    return () => {
       if (!node) { return }
-      node.setParamValue(this.address, !node.getParamValue(this.address))
+      const new_value = Boolean(node.getParamValue(this.address)) ? 0 : 1
+      node.setParamValue(this.address, new_value)
     }
   }
 
@@ -126,11 +121,6 @@ class Control {
   disconnect() {
     if (this.port)
       this.port.remove()
-  }
-
-  // Get the current value of this parameter's input port 
-  value() {
-    return this.port.get()
   }
 }
 
@@ -172,7 +162,6 @@ class Audio {
       if (!node) return
 
       const input = this.port.get()
-      console.log(input)
       if (this.currentInput) return
       else {
         const input = this.port.get()
@@ -185,7 +174,6 @@ class Audio {
           input.connect(node)
           this.currentInput = input
         } catch (err) {
-          console.error(err)
           this.context.setUiError("FaustError", `Cannot connect audio input to Faust node: ${err}`)
         }
       }
@@ -224,7 +212,6 @@ export class PortHandler {
   updateControl(node, descriptors) {
     // Remove ports attached to params that do not exist on current node
     this.removeUnusedControl(descriptors)
-
     for (const descriptor of descriptors) {
       const address = descriptor.address
       // If this is a new parameter then we need to create a control object
@@ -239,7 +226,6 @@ export class PortHandler {
   updateAudio(node) {
     // if there are no audio inputs but our audio singleton is not null then drop it and return
     const numAudioInputs = node.getNumInputs();
-    console.log(`NUM AUDIO INPUTS: ${numAudioInputs}`);
     if (numAudioInputs === 0) {
       try {
         this.audio.disconnect()
@@ -319,26 +305,11 @@ export class PortHandler {
     const addresses = descriptors.map(descriptor => descriptor.address)
     for (const [address, port] of Object.entries(this.control)) {
       if (!addresses.includes(address)) {
-        console.log(`Removing port \`${address}\``)
         port.disconnect()
         delete this.control[address];
       }
     }
   }
-
-  // For debugging, removes all input ports
-  clearPorts() {
-    console.log("CLEARING PORTHANDLER")
-    for (const [addr, port] of Object.entries(this.control)) {
-      port.disconnect()
-      delete this.control[addr]
-    }
-    for (const i in this.audio) {
-      this.audio[i].disconnect()
-      delete this.audio[i]
-    }
-  }
-
 }
 
 export default { PortHandler }
