@@ -3,7 +3,6 @@
 const TRIGGER_LEN = 20
 
 // Split an array into two arrays according to a predicate 
-// (a -> bool) -> [a] -> ([a], [a])
 function partition(pred, arr) {
   const truthy = [], falsy = []
   for (const idx in arr) {
@@ -44,6 +43,11 @@ function isMidi(descriptor, isPoly = false) {
   return isPoly && ['freq', 'gate', 'gain'].includes(descriptor.label)
 }
 
+const ControlType = {
+  Slider: 0,
+  Button: 1,
+  CheckBox: 2
+}
 
 class Control {
   constructor(descriptor, context) {
@@ -51,16 +55,31 @@ class Control {
 
     this.address = descriptor.address
     this.label = descriptor.label
-    this.isButton = descriptor.type === 'button'
+    this.type = this.parseType(descriptor.type)
 
     this.initialize()
+  }
+
+  static parseType(typeString) {
+    switch (typeString) {
+      case 'button': return ControlType.Button
+      case 'checkbox': return ControlType.CheckBox
+      default: return ControlType.Slider
+    }
+  }
+
+  static isTriggerType() {
+    return this.type == ControlType.Button || this.type == ControlType.CheckBox
   }
 
   /// Create a port for the given parameter
   /// @param {AudioNode} node 
   initialize() {
     console.log(`Initializing port: ${this.address}`)
-    this.port = this.isButton ? this.context.inTrigger(this.label) : this.context.inFloat(this.label);
+    if (this.isTriggerType())
+      this.port = this.context.inTrigger(this.label)
+    else
+      this.port = this.context.inFloat(this.label)
   }
 
   /// add a callback to port that sets the appropriate param
@@ -68,25 +87,40 @@ class Control {
   /// @param {AudioNode} node 
   /// @param {CablesPort} port 
   addCallback(node) {
-    // The callback field for Cables trigger ports is "onTriggered", 
-    // "onChange" for every other type
-    this.port[this.isButton ? 'onTriggered' : 'onChange'] =
-      // If this parameter is a Faust button param then we need to create a callback
-      // that acts as a trigger, an on-off with no sustain, otherwise we may simply set
-      // the parameter's value to the value the input port is receiving
-      this.isButton ?
-        () => {
-          if (!node) { return }
-          node.setParamValue(this.address, 1)
-          setTimeout(() => node.setParamValue(this.address, 0), TRIGGER_LEN)
-        }
-        : () => {
-          if (!node) { return }
-          node.setParamValue(this.address, this.value)
-        }
+    switch (this.type) {
+      case ControlType.Button: {
+        this.port.onTriggered = this.addButtonCallback(node)
+        break
+      }
+      case ControlType.CheckBox: {
+        this.port.onTriggered = this.addCheckBoxCallback(node)
+        break
+      }
+      default: this.port.onChange = this.addSliderCallback(node)
+    }
   }
 
+  addButtonCallback(node) {
+    return function () {
+      if (!node) { return }
+      node.setParamValue(this.address, 1)
+      setTimeout(() => node.setParamValue(this.address, 0), TRIGGER_LEN)
+    }
+  }
 
+  addSliderCallback(node) {
+    return function () {
+      if (!node) { return }
+      node.setParamValue(this.address, this.value())
+    }
+  }
+
+  addCheckBoxCallback(node) {
+    return function () {
+      if (!node) { return }
+      node.setParamValue(this.address, !node.getParamValue(this.address))
+    }
+  }
 
   // Remove the port from the operator
   disconnect() {
@@ -95,7 +129,7 @@ class Control {
   }
 
   // Get the current value of this parameter's input port 
-  get value() {
+  value() {
     return this.port.get()
   }
 }
@@ -208,7 +242,6 @@ export class PortHandler {
       try {
         this.audio.disconnect()
         this.audio = null
-
       } catch (_) { }
       finally { return }
     } else if (this.audio) {
