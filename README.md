@@ -43,10 +43,12 @@ or the url inlined in the call to `soundfile`.
 
 # Polyphony
 
-Polyphonic mode uses MIDI by default, and expects a frequency and gate param to be present in your script's parameters:
+Polyphonic mode uses MIDI by default, and expects a frequency(`freq` or `key`) and gate(`gate`) parameter to be present in your script:
 
 - `freq`: frequency in Hz
 - `key`: MIDI key number (0 - 127)
 - `gate`: note-on trigger
 - `gain`: *optional* velocity normalized to 0-1
 - `velocity` or `vel`: *optional* MIDI velocity (0 - 127)
+
+For more information see [the Faust MIDI documentation](https://faustdoc.grame.fr/manual/midi/)
