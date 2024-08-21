@@ -15,9 +15,9 @@ of `porthandler.js` and `dist/index.js` into Cables attachments named
 `porthandler` and `faustwasm` respectively.
 
 From there, you may write Faust programs in the operator's string editor, and 
-input/output ports for each Faust parameter will be generated. Faust button and checkbox 
-params correspond to Cables' trigger ports, audio to object ports, everything 
-else to number ports. The port's names will mirror your Faust params, simply 
+input ports for each Faust parameter will be generated. Faust button and checkbox 
+parameters correspond to Cables' trigger ports, audio to object ports, everything 
+else to number ports. The port's names will mirror your Faust parameters, simply 
 attach other Cables operators to control them.
 
 # Soundfiles
