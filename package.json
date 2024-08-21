@@ -5,7 +5,7 @@
   "main": "main.js",
   "scripts": {
     "build": "rollup -c",
-    "fmt": "npx prettier --write *.js"
+    "fmt": "npx prettier --write src/*.js"
   },
   "author": "",
   "license": "ISC",
@@ -20,5 +20,8 @@
     "rollup-plugin-terser": "^7.0.2",
     "tslib": "^2.6.3",
     "typescript": "^5.4.5"
-  }
+  },
+  "files": [
+    "src/"
+  ]
 }

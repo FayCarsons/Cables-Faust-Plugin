@@ -6,7 +6,7 @@ const Voicing = {
   Poly: 'Polyphonic',
 }
 
-const FAUST_ERROR = "FaustError"
+const FAUST_ERROR = 'FaustError'
 
 const voicesPort = op.inInt('Voices', 1)
 const contextPort = op.inObject('Context')
@@ -14,7 +14,7 @@ const audioOut = op.outObject('Audio Out')
 
 class Faust {
   constructor(PortHandler) {
-    // We have to bind `this` to `update` to ensure `this` refers to the object 
+    // We have to bind `this` to `update` to ensure `this` refers to the object
     // and not the enclosing promise
     this.update = this.update.bind(this)
 
@@ -50,13 +50,13 @@ class Faust {
         this.voicing = voicing
         this.voices = voicesPort.get() ?? this.voices
 
-        // Before updating the node, try to disconnect it from any nodes it may 
-        // be connected to. This will fail if it is not connected, which is 
+        // Before updating the node, try to disconnect it from any nodes it may
+        // be connected to. This will fail if it is not connected, which is
         // fine so we ignore the exception
         if (this.node)
           try {
             this.node.destroy()
-          } catch (_) { }
+          } catch (_) {}
 
         this.node = await generator.createNode(this.audioCtx, this.voices)
         this.portHandler.update(this.node, this.getContext())
@@ -66,8 +66,7 @@ class Faust {
       }
     } catch (err) {
       op.setUiError('FaustError', `cannot create Faust instance: ${err}`)
-      if (this.node)
-        this.node.destroy()
+      if (this.node) this.node.destroy()
       this.node = null
       audioOut.setRef(null)
     }
@@ -78,10 +77,15 @@ async function builder() {
   const portHandlerModuleText = attachments['porthandler']
 
   if (!portHandlerModuleText) {
-    op.setUiError(FAUST_ERROR, "Internal error - cannot import \'porthandler\' module, has it been removed from attachmments?")
+    op.setUiError(
+      FAUST_ERROR,
+      "Internal error - cannot import 'porthandler' module, has it been removed from attachmments?",
+    )
   }
 
-  const blob = new Blob([portHandlerModuleText], { type: 'application/javascript' })
+  const blob = new Blob([portHandlerModuleText], {
+    type: 'application/javascript',
+  })
   const url = URL.createObjectURL(blob)
 
   try {

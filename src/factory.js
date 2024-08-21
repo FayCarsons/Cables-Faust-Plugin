@@ -6,8 +6,7 @@ console.clear()
 // Port -> an input/output port on the operator
 // Node -> a Web Audio node
 
-const DEFAULT_SCRIPT =
-  `import("stdfaust.lib");
+const DEFAULT_SCRIPT = `import("stdfaust.lib");
 
 N = 8;
 
@@ -19,14 +18,14 @@ detune = hslider("detune", 0.1, -10, 10, 0.01);
 
 process = drone(N, frequency, detune) :> /(N);`
 
-// Hacky enum, allows for comparison by reference vs deep equality which would 
+// Hacky enum, allows for comparison by reference vs deep equality which would
 // be more expensive
 const Voicing = {
   Mono: 'Monophonic',
   Poly: 'Polyphonic',
 }
 
-const FAUST_ERROR = "FaustError"
+const FAUST_ERROR = 'FaustError'
 
 const codePort = op.inStringEditor('Code', DEFAULT_SCRIPT)
 const voicingPort = op.inSwitch(
@@ -80,7 +79,11 @@ class FaustContext {
 
 async function build() {
   const text = attachments['faustwasm']
-  if (!text) op.setUiError("FaustError", "module \'faustwasm\' cannot be found, has it been removed from attachments?")
+  if (!text)
+    op.setUiError(
+      'FaustError',
+      "module 'faustwasm' cannot be found, has it been removed from attachments?",
+    )
   const blob = new Blob([text], { type: 'application/javascript' })
   const url = URL.createObjectURL(blob)
 
