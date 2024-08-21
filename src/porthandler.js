@@ -3,18 +3,23 @@
 const TRIGGER_LEN = 20
 
 // Split an array into two arrays according to a predicate
-function partition(pred, arr) {
-  const truthy = [],
-    falsy = []
-  for (const idx in arr) {
-    if (pred(arr[idx])) {
-      truthy.push(arr[idx])
-    } else {
-      falsy.push(arr[idx])
-    }
-  }
+function foldPartition({
+  predicate,
+  folder,
+  acc,
+  collection,
+}) {
+  const truthy = [], falsy = []
 
-  return [truthy, falsy]
+  collection.forEach(element => {
+    if (predicate(element))
+      truthy.push(element)
+    else
+      falsy.push(element)
+    folder(acc, element)
+  })
+
+  return [truthy, falsy, acc]
 }
 
 // Faust script has `declare option "[midi:on]";`?
@@ -290,20 +295,33 @@ export class PortHandler {
     this.midi.update(node)
   }
 
-  partitionMidi(descriptors, isPoly = false) {
-    const [midi, rest] = partition(
-      descriptor => isMidi(descriptor, isPoly),
-      descriptors,
-    )
+  processParams(descriptors, isPoly) {
+    const [midi, rest, { frequencyParam, gateParam }] = foldPartition({
+      predicate: descriptor => isMidi(descriptor, isPoly),
+      folder: function (acc, element) {
+        const label = element.label
+        if (label === 'freq' || label === 'key') {
+          acc.frequencyParam = true
+          return acc
+        }
+        else if (label === 'gate') {
+          acc.gateParam = true
+          return acc
+        } else return acc
+      },
+      acc: {},
+      collection: descriptors,
+    })
+
     if (isPoly)
-      // Only do this check if we are in Polyphonic mode
-      if (!(['freq', 'key'].some(midi.includes) && midi.includes('gate')))
+      if (!(frequencyParam && gateParam))
         throw new Error(`Polyphonic scripts must have the following params:\n
             freq -> accepts MIDI notes 0-127\n
             gate -> accepts triggers\n
             for more information see: github.com/FayCarsons/Cables-Faust-Plugin\n 
             and the Faust MIDI documentation: faustdoc.grame.fr/manual/midi/
           `)
+
     return [midi, rest]
   }
 
@@ -315,7 +333,7 @@ export class PortHandler {
 
     if (ctx.voiceMode === ctx.Voicing.Poly || hasMidi(node)) {
       // ignore midi parameters, they will be controlled by the midi port
-      const [_, nonMidiParams] = this.partitionMidi(
+      const [_, nonMidiParams] = this.processParams(
         descriptors,
         ctx.voiceMode == ctx.Voicing.Poly,
       )
