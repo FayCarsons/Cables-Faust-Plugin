@@ -184,7 +184,10 @@ class Audio {
     this.port.onLinkChanged = () => {
       if (this.port.isLinked()) return
       else {
-        this.currentInput.disconnect(node)
+        try {
+          this.currentInput.disconnect(node)
+        }
+        catch (_) { }
       }
     }
   }
@@ -234,9 +237,14 @@ export class PortHandler {
       finally { return }
     } else if (this.audio) {
       // If the audio singleton has already been instantiated then add a new 
-      // callback holding a reference to the current Faust node
+      // callback holding a reference to the current Faust node and if there's 
+      // an op linked then connect it to the node
       this.audio.addCallback(node)
       this.audio.addUnlinkCallback(node)
+      if (this.audio.port.isLinked()) {
+        this.audio.currentInput = this.audio.port.get()
+        this.audio.currentInput.connect(node)
+      }
     } else {
       // Instantiate the Audio singleton - this adds the callback mentioned in 
       // the previous comment
