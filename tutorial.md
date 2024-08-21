@@ -45,11 +45,11 @@ There are two ways to incorporate MIDI into a Faust program inside of the `Faust
 
 - Using the `declare options [midi:on]` Faust syntax and labeling MIDI controlled parameters as such. 
 - Running the program in polyphonic mode, in which case it will expect the following parameters: 
-- - `freq`: frequency in Hz 
-- - `key`: MIDI key number
-- - `gate`: note on trigger 
-- - `gain`: *optional* velocity normalized to 0-1 
-- - `vel`/`velocity`: *optional* MIDI velocity 
+  - `freq`: frequency in Hz 
+  - `key`: MIDI key number
+  - `gate`: note on trigger 
+  - `gain`: *optional* velocity normalized to 0-1 
+  - `vel`/`velocity`: *optional* MIDI velocity 
 
 Doing either of these things will cause each `FaustInstance` to create an `Object` port which expects MIDI messages.
 Normal, non-MIDI, parameters as well as audio input can coexist with MIDI input, allowing for more complex control schemes and DSP programs such as polyphonic granular synthesizers or vocoders. 
