@@ -30,15 +30,17 @@ function hasMidi(node) {
   return false
 }
 
+const BUILTIN_MIDI_PARAM_NAMES = ['freq', 'key', 'gate', 'gain', 'vel', 'velocity']
+
 // Parameter is controlled by midi?
 // If we are in poly mode then we need to always count 'freq' 'gate' and 'gain'
 // as MIDI params, otherwise only those specifically label as midi
 function isMidi(descriptor, isPoly = false) {
   if (descriptor.meta) {
-    return descriptor.meta?.some(option => !!option.midi) || false
+    return descriptor.meta?.some(option => !!option.midi) ?? false
   }
 
-  return isPoly && ['freq', 'gate', 'gain'].includes(descriptor.label)
+  return isPoly && BUILTIN_MIDI_PARAM_NAMES.includes(descriptor.label)
 }
 
 const ControlType = {
