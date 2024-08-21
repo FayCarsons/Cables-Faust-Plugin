@@ -1,0 +1,1 @@
+- Move check for built-in MIDI parameters to `FaustContext` from `porthandler.js` (in function `partitionMidi`)

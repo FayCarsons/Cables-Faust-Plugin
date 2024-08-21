@@ -291,18 +291,20 @@ export class PortHandler {
   }
 
   partitionMidi(descriptors, isPoly = false) {
-    const [poly, rest] = partition(
+    const [midi, rest] = partition(
       descriptor => isMidi(descriptor, isPoly),
       descriptors,
     )
-    if (isPoly && poly.length === 0)
-      throw new Error(`Polyphonic scripts must have the following params:\n
+    if (isPoly)
+      // Only do this check if we are in Polyphonic mode
+      if (!(['freq', 'key'].some(midi.includes) && midi.includes('gate')))
+        throw new Error(`Polyphonic scripts must have the following params:\n
             freq -> accepts MIDI notes 0-127\n
             gate -> accepts triggers\n
             for more information see: github.com/FayCarsons/Cables-Faust-Plugin\n 
             and the Faust MIDI documentation: faustdoc.grame.fr/manual/midi/
           `)
-    return [poly, rest]
+    return [midi, rest]
   }
 
   update(node, ctx) {
