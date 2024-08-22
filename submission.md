@@ -1,7 +1,7 @@
 # Faust Cables.gl Plugin
 
 This Google Summer of Code program aimed to create a [Faust](https://faust.grame.fr) plugin for the [Cables.gl](https://cables.gl) platform, an in-browser visual programming environment similar to Max MSP or Pure Data. 
-This takes the form of a Cables 'operator', a single contained app which can interface with other operators in a cables patch via audio and control signals.
+This takes the form of a Cables 'operator', a single self-contained program which can interface with other operators in a cables patch via audio and control signals.
 
 This Faust operator enables Cables users to write boilerplate-free DSP programs that are embedded in and integrate with the other audio-visual elements of their Cables patches.
 
@@ -41,18 +41,18 @@ Having to declare MIDI parameters in your Faust program and then also hit the "M
 
 I have been teaching myself to code for roughly 2 years, and in that time have written statically-typed mostly-pure functional code almost exclusively. Out of the available paradigms it is the obvious choice and maps most clearly to my understanding of the world. I encountered Faust through a desire to merge functional programming and audio synthesis, my main hobbies, and from there found myself applying to GSoC. 
 
-It was sort of a rude awakening when I started on the project and found that Cables' operator API disallowed functional programming *and* required the use of global mutable state, generally discouraged even non-functional. Everything had to be instantiated at the top-level of the namespace, and then updated through callbacks. This and the lack of a type system caused me the most struggle in this project.
+It was sort of a rude awakening when I started on the project and found that Cables' operator API disallowed functional programming *and* required the use of global mutable state, generally discouraged even in imperative code. Everything had to be instantiated at the top-level of the namespace, and then updated through callbacks. This and the lack of a type system caused me the most struggle in this project.
 
-I sometimes joke that I am not smart enough for dynamic languages, I need a type system to tell me when I've forgotten arguments, or a field access, or simply put the wrong thing in the wrong place. I lost a few weeks wrestling with the core state-management of the app, eventually giving up any semblance of my usual programming style in favor of the style that Cables wanted me to write. Everything was refactored in an OOP style, all functionality clearly delimited by classes. I added named arguments, default values for arguments where necessary, and getter/setter functions which allowed for logging updates more easily. This reduced non-deterministic behavior enough that I was able to get some stability and, after a couple of weeks, the core of the app was finished. 
+I sometimes joke that I am not smart enough for dynamic languages, I need a type system to tell me when I've forgotten arguments, or a field access, or simply put the wrong thing in the wrong place. I lost a few weeks wrestling with the core state-management of the op, eventually giving up any semblance of my usual programming style in favor of the style that Cables wanted me to write. Everything was refactored in an OOP style, all functionality clearly delimited by classes. I added named arguments, default values for arguments where necessary, and getter/setter functions which allowed for logging updates more easily. This added clarity reduced logic bugs and non-deterministic behavior enough that I was able to finish the core of the op in a couple of weeks. 
 
 If I learned something from this I think it would be to be more flexible, to work within the parameters my environment asks me to, because bending things to match my own taste can be more trouble than its worth. Paradigms are ultimately style, in the end it all becomes imperative machine code and its valuable to understand how to work with, not against, that. I anticipate having to work with languages and paradigms that are not my first choice, on software that is not elegant or bug-free, in my career and I've gained useful experience doing that from this project.
 
 ### Going forward
 
-For the most part, all the features I set out to implement have been finished. The app is maybe not as robust as I would like, which is my first instinct as far as "what to do next". Beyond that, I'll list out some features I wish I could have added: 
+For the most part, all the features I set out to implement have been finished. The op is maybe not as robust as I would like, which is my first instinct as far as what to do next. Beyond that, I'll list out some features I would have liked to add: 
 
 - Using WebGL buffers as Faust waveforms or soundfiles
-- Control signal outputs from the Faust program, I.E. outputting the amplitude of the current synth to be used in visuals
+- Control signal outputs from the Faust program, e.g. outputting the amplitude of the current synth to be used in visuals
 - Gyroscope and accelerometer support 
 - The ability to output the audio buffer so it can be used in shader programs
 
