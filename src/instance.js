@@ -39,6 +39,36 @@ class Faust {
       op,
       Voicing,
       voiceMode: this.voicing,
+      midi: this.meta.midi
+    }
+  }
+
+  parseMeta() {
+    if (!this.node) return;
+
+    const { meta } = this.node.getMeta()
+
+    for (let i = meta.length - 1; i > 0; --i) {
+      const options = meta[i].options
+      if (options) {
+        this.meta = {}
+        const regex = /\[([^\]:]+):([^\]]+)\]/g;
+        let match;
+
+        while (match = regex.exec(options)) {
+          let [_, key, val] = match;
+          if (key && val) {
+            let value;
+            try {
+              value = JSON.parse(val)
+            } catch (_) {
+              value = val
+            }
+
+            this.meta[key] = value === 'on' ? true : value
+          }
+        }
+      }
     }
   }
 
@@ -56,9 +86,15 @@ class Faust {
         if (this.node)
           try {
             this.node.destroy()
-          } catch (_) {}
+          } catch (_) { }
 
         this.node = await generator.createNode(this.audioCtx, this.voices)
+        this.parseMeta()
+
+        if (this.meta.nvoices) {
+          this.voices = this.meta.nvoices
+        }
+
         this.portHandler.update(this.node, this.getContext())
 
         audioOut.setRef(this.node)

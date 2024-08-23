@@ -22,20 +22,6 @@ function foldPartition({
   return [truthy, falsy, acc]
 }
 
-// Faust script has `declare option "[midi:on]";`?
-function hasMidi(node) {
-  const metadata = node.getMeta().meta
-  // Options is generally near the end of the metadata array, so start from there
-  if (metadata)
-    for (let i = metadata.length - 1; i > 0; --i) {
-      const options = metadata[i].options
-      if (options) {
-        return options.trim().includes('[midi:on]')
-      }
-    }
-  return false
-}
-
 const BUILTIN_MIDI_PARAM_NAMES = [
   'freq',
   'key',
@@ -325,13 +311,10 @@ export class PortHandler {
     return [midi, rest]
   }
 
-  update(node, ctx) {
-    // Update the context or keep the old if not passed
-    this.context = ctx ?? this.context
-
+  update(node, ctx = this.context) {
     let descriptors = node.getDescriptors()
 
-    if (ctx.voiceMode === ctx.Voicing.Poly || hasMidi(node)) {
+    if (ctx.voiceMode === ctx.Voicing.Poly || this.context.midi) {
       // ignore midi parameters, they will be controlled by the midi port
       const [_, nonMidiParams] = this.processParams(
         descriptors,
