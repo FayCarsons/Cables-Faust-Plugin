@@ -54,3 +54,4 @@ There are two ways to incorporate MIDI into a Faust program inside of the `Faust
 
 Doing either of these things will cause each `FaustInstance` to create an `Object` port which expects MIDI messages.
 Normal, non-MIDI, parameters as well as audio input can coexist with MIDI input, allowing for more complex control schemes and DSP programs such as polyphonic granular synthesizers or vocoders. 
+Some examples of MIDI and polyphony in use with the Faust Cables operator can be found in the [polyphony example](https://cables.gl/edit/9qS0Ck) and the [vocoder example](https://cables.gl/edit/lSPb1m)
