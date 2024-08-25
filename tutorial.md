@@ -1,6 +1,6 @@
 # Using Faust in Cables.gl
 
-The aim of this tutorial is to get you comfortable writing your own embedded DSP scripts in the [Cables.gl](https://www.cables.gl) platform using the [Faust](https://faust.grame.fr) operator that I developed. We will go over a series of examples that demonstrate all of the operator's core features, with links to the examples so you can follow along. 
+The aim of this tutorial is to get you comfortable writing your own embedded DSP scripts in the [Cables.gl](https://www.cables.gl) platform using the [Faust](https://faust.grame.fr) operator that I developed. We will go over a series of examples that demonstrate all of the operator's core features, with links to example so you can follow along. 
 
 ## Glossary
 
@@ -34,6 +34,33 @@ One place where parameter declaration differs is in the cases of MIDI or polypho
 Faust is a DSP scripting language. It allows you to build portable synthesizer apps (think VSTs, Web Audio nodes) with a high-level functional language reminiscent of Haskell or Standard ML. A Faust app can be thought of as one pure function of time and any user-added parameters.
 
 If you're unfamiliar with Faust, before going through this tutorial I suggest you read the [documentation on the website](https://faust.grame.fr/) and try the [Faust IDE](https://faustide.grame.fr/) where there are lots of examples and you can quickly write and play synthesizers.
+
+First, open up [this example](https://cables.gl/edit/KB1y0m). This is our "Hello world", a simple synthesizer with a slider to set pitch and a button to play a note. Let's walk through how to put together a patch like this.
+
+Following Cables' convention of context-providing operators and children that receive context, building a Faust program requires instantiating a `FaustContext` and a `FaustInstance` operator. The `FaustContext` is our compiler, it has a built-in string editor where you write your code and a switch to choose between monophony and polyphony. In our demo patch you'll see it's `Context` output port is connected to the `FaustInstance`'s `Context` input. Once a `FaustInstance` has received the context it will automatically use it to instantiate a Web Audio node that is running your code and populate its ports with the Faust program's parameters. Like any Web Audio operator, it has an audio out that you can connect to another op or an `output` op to have it sent to your speakers.
+
+If we open the code editor of the `FaustContext` operator we'll see this section:
+
+```dsp 
+frequency = hslider("Frequency", 220, 10, 10000, 1);
+play = button("play");
+```
+Looking at the ports on our `FaustInstance` you'll see a number port named `frequency` and a trigger port named `play` corresponding to these Faust parameters. This is how you get signals into your Faust program. The operator supports all Faust parameter primitives, though UI layout functions like `hgroup` or `tgroup` have no effect. 
+
+A short rundown on the behavior of Faust parameter primitives in this operator:
+
+- `button`: a stateless 20ms trigger. A direct translation of Cables' trigger type 
+- `checkbox`: a stateful latch, one Cables' trigger will set the state to `on`, another will turn it back off
+- `hslider`, `vslider`, `nentry`: These become number ports. They will clamp input to the range specified in the Faust script.
+
+Below this section of our Faust code we see the actual DSP, the one thing that I will explain is the `process` keyword, the rest is out of the scope of this document. 
+`process` is like GLSL's `FragColor` or `outColor`. It is the output of our Faust program. A trivial Faust program could be written `process = _`, which produces a synthesizer which takes one audio input and passes it through. In polyphonic mode there is also the `effect` keyword, which will be used as a global effect on all the voices of your synth.
+
+An audio input port will be created for any Faust program that takes audio, like our trivial Faust program from above. Audio inputs must be an instance of the `AudioNode` class, this is to prevent runtime errors from attempting to connect non-Web Audio objects to a Faust node. 
+
+Currently, with Cables' lacking any Web Audio operators that output more than 2 audio channels, it only handles mono and stereo. Though, theoretically, if you were to code your own operator that outputs >2 channels our Faust operator could interface with it. 
+
+A `FaustInstance` can accept one other type of input: MIDI. FOr more information see [this section](#midi-and-polyphony) and the linked demos.
 
 # MIDI and Polyphony
 
