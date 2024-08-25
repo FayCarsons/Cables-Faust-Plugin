@@ -22,33 +22,26 @@ attach other Cables operators to control them.
 
 # Soundfiles
 
-Faust's stdlib includes a `soundfile` primitive which can be used to load audio files. Documentation can be found [here](https://faustdoc.grame.fr/manual/soundfiles/). In the case of this Cables operator, a soundfile will be fetched when the Faust script is compiled. There is one caveat:
-soundfile paths must be written explicitly in whole.
+Faust's standard library includes a `soundfile` primitive which can be used to load audio files. Documentation can be found [here](https://faustdoc.grame.fr/manual/soundfiles/). 
 
-This:
+In the case of this Cables operator, a soundfile will be fetched when the Faust script is compiled. There is one caveat:
+soundfile paths must be written in whole where they are used.
+
+For example, this syntax will not compile:
 ```dsp
 declare soundfiles "https://foo.com/bar";
 
 file = soundfile("baz.wav", 1);
 ```
 
-will break your Faust script. Instead the file should be included like this:
+Instead the URL should be inlined in the call to `soundfile` like this:
 
 ```dsp
-url = "https://foo.com/bar/baz.wav;"
-file = soundfile(url, 2);
+file = soundfile("https://foo.com/bar/baz.wav;", 2);
 ```
-
-or the url inlined in the call to `soundfile`.
 
 # Polyphony
 
-Polyphonic mode uses MIDI by default, and expects a frequency(`freq` or `key`) and gate(`gate`) parameter to be present in your script:
+Polyphonic mode uses MIDI by default, and expects a frequency(`freq` or `key`) and gate(`gate`) parameter to be present in your script. 
 
-- `freq`: frequency in Hz
-- `key`: MIDI key number (0 - 127)
-- `gate`: note-on trigger
-- `gain`: *optional* velocity normalized to 0-1
-- `velocity` or `vel`: *optional* MIDI velocity (0 - 127)
-
-For more information see [the Faust MIDI documentation](https://faustdoc.grame.fr/manual/midi/)
+For more information see the in-depth explanation [here](/tutorial.md#midi-and-polyphony) and [the Faust MIDI documentation](https://faustdoc.grame.fr/manual/midi/)

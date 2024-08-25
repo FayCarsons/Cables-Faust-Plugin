@@ -2,7 +2,8 @@
 
 const TRIGGER_LEN = 20
 
-// Split an array into two arrays according to a predicate
+// Split an array into two arrays according to a predicate while also threading 
+// an accumulator (that is set with side effects) through iterations
 function foldPartition({
   predicate,
   folder,
@@ -32,8 +33,8 @@ const BUILTIN_MIDI_PARAM_NAMES = [
 ]
 
 // Parameter is controlled by midi?
-// If we are in poly mode then we need to always count 'freq' 'gate' and 'gain'
-// as MIDI params, otherwise only those specifically label as midi
+// If we are in poly mode then we need to always count poly params
+// denoted by Faust's conventions 'freq' 'key' 'gate' etc
 function isMidi(descriptor, isPoly = false) {
   if (descriptor.meta) {
     return descriptor.meta?.some(option => !!option.midi) ?? false
@@ -42,6 +43,8 @@ function isMidi(descriptor, isPoly = false) {
   return isPoly && BUILTIN_MIDI_PARAM_NAMES.includes(descriptor.label)
 }
 
+// Types of Faust params that have an equivalent cables signal type
+// We use a static object like a sum type to minimize error
 const ControlType = {
   Slider: 0,
   Button: 1,
@@ -281,20 +284,26 @@ export class PortHandler {
     this.midi.update(node)
   }
 
+  // Separates MIDI-controlled params from non-MIDI and asserts that necessary 
+  // params are present for polyphony
   processParams(descriptors, isPoly) {
+    const foldPolyParams = (acc, element) => {
+      const label = element.label
+      if (label === 'freq' || label === 'key') {
+        acc.frequencyParam = true
+        return acc
+      }
+      else if (label === 'gate') {
+        acc.gateParam = true
+        return acc
+      } else return acc
+    }
+
+    // Fold over params separating MIDI from non-MIDI and add boolean flags 
+    // stating whether a poly-compatible frequency and gate param are present
     const [midi, rest, { frequencyParam, gateParam }] = foldPartition({
       predicate: descriptor => isMidi(descriptor, isPoly),
-      folder: function (acc, element) {
-        const label = element.label
-        if (label === 'freq' || label === 'key') {
-          acc.frequencyParam = true
-          return acc
-        }
-        else if (label === 'gate') {
-          acc.gateParam = true
-          return acc
-        } else return acc
-      },
+      folder: foldPolyParams,
       acc: {},
       collection: descriptors,
     })
@@ -311,6 +320,7 @@ export class PortHandler {
     return [midi, rest]
   }
 
+  // Update control ports and AUDIO + MIDI singletons
   update(node, ctx = this.context) {
     let descriptors = node.getDescriptors()
 
@@ -320,7 +330,9 @@ export class PortHandler {
         descriptors,
         ctx.voiceMode == ctx.Voicing.Poly,
       )
+
       this.updateMidi(node)
+
       // parameter descriptors with midi filtered out - so that we can create input ports
       // for only the params that are not controlled by the MIDI handler Singleton
       descriptors = nonMidiParams

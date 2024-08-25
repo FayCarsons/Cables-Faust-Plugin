@@ -11,7 +11,7 @@ The aim of this tutorial is to get you comfortable writing your own embedded DSP
 
 # Coming from Faust
 If you're not familiar with Cables, you may want to check out their [documentation](https://www.cables.gl/docs/docs) which is fairly comprehensive.
-If you're familiar with other visual DSP/Graphics coding platforms like Max MSP or Pure Data then it should be easy to pick up.
+If you are familiar with other visual DSP/Graphics coding platforms like Max MSP or Pure Data then it should be easy to pick up.
 
 The Faust operator is a single unit in a modular graph of operators. It can be thought of as similar to a Max or Pure Data operator, or, if visual programming interfaces aren't your thing, an OOP class or module functor - it is a black box which takes input (code, MIDI, control signals), returns output (audio) and you don't have to worry about it beyond that.
 
@@ -36,6 +36,8 @@ One place where parameter declaration differs is in the cases of MIDI or polypho
 Faust is a DSP scripting language. It allows you to build portable synthesizer apps (think VSTs, Web Audio nodes) with a high-level functional language reminiscent of Haskell or Standard ML. A Faust app can be thought of as one pure function of time and any user-added parameters.
 
 If you're unfamiliar with Faust, before going through this tutorial I suggest you read the [documentation on the website](https://faust.grame.fr/) and try the [Faust IDE](https://faustide.grame.fr/) where there are lots of examples and you can quickly write and play synthesizers.
+
+
 
 # MIDI and Polyphony
 
